@@ -1,0 +1,16 @@
+{
+  "name": "shlvd",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^10.14.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
