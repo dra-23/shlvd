@@ -179,6 +179,22 @@ function buildSheetHTML(book, existingShelf) {
 
     <div class="sheet-body">
 
+      <!-- Genre -->
+      <div>
+        <div class="sheet-section-label">Genre</div>
+        <input type="text" class="genre-input-field" id="genre-input"
+          value="${book.genre || ''}" placeholder="e.g. Fantasy, Literary Fiction…" />
+      </div>
+
+      ${hasDescription ? `
+      <!-- Description -->
+      <div>
+        <div class="sheet-section-label">Description</div>
+        <div class="description-text" id="description-text">${book.description}</div>
+        <button class="btn btn-text" id="desc-toggle" style="padding:4px 0;margin-top:4px;">Show more</button>
+      </div>
+      ` : ''}
+
       <!-- Shelf -->
       <div>
         <div class="sheet-section-label">Shelf</div>
@@ -219,13 +235,6 @@ function buildSheetHTML(book, existingShelf) {
         </div>
       </div>
 
-      <!-- Genre -->
-      <div>
-        <div class="sheet-section-label">Genre</div>
-        <input type="text" class="genre-input-field" id="genre-input"
-          value="${book.genre || ''}" placeholder="e.g. Fantasy, Literary Fiction…" />
-      </div>
-
       <!-- BotM toggle -->
       <button class="botm-toggle-btn" id="botm-btn">
         <span class="material-symbols-rounded">auto_awesome</span>
@@ -238,15 +247,6 @@ function buildSheetHTML(book, existingShelf) {
         <textarea class="notes-textarea" id="notes-input"
           placeholder="Your thoughts…">${book.notes || ''}</textarea>
       </div>
-
-      ${hasDescription ? `
-      <!-- Description -->
-      <div>
-        <div class="sheet-section-label">Description</div>
-        <div class="description-text" id="description-text">${book.description}</div>
-        <button class="btn btn-text" id="desc-toggle" style="padding:4px 0;margin-top:4px;">Show more</button>
-      </div>
-      ` : ''}
 
       <!-- Save -->
       <button class="btn btn-filled" id="save-btn" style="width:100%;height:48px">

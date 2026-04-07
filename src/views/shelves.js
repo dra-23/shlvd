@@ -26,7 +26,7 @@ const allShelfBooks = { reading: [], want: [], read: [] }
 const SHELF_BADGE   = { reading: 'Reading', want: 'Queued', read: 'Read' }
 
 // Read-tab pagination
-const MONTHS_PER_PAGE = 3
+const MONTHS_PER_PAGE = 6
 let visibleMonths = MONTHS_PER_PAGE
 
 export function renderShelves(container) {
