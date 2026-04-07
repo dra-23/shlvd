@@ -21,7 +21,7 @@ export function showSnackbar(msg) {
 }
 
 // Module-level state
-let activeTab = 'want'
+let activeTab = 'reading'
 const allShelfBooks = { reading: [], want: [], read: [] }
 const SHELF_BADGE   = { reading: 'Reading', want: 'Queued', read: 'Read' }
 
@@ -105,6 +105,26 @@ export function renderShelves(container) {
 
   // Position indicator after layout
   requestAnimationFrame(positionIndicator)
+
+  // ── Swipe between tabs ────────────────────────────────
+  const swipeEl = container.querySelector('#shelves-content')
+  let touchStartX = 0
+  let touchStartY = 0
+
+  swipeEl.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX
+    touchStartY = e.touches[0].clientY
+  }, { passive: true })
+
+  swipeEl.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX
+    const dy = e.changedTouches[0].clientY - touchStartY
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+    const tabIds = TABS.map(t => t.id)
+    const cur = tabIds.indexOf(activeTab)
+    if (dx < 0 && cur < tabIds.length - 1) setActiveTab(tabIds[cur + 1])
+    if (dx > 0 && cur > 0) setActiveTab(tabIds[cur - 1])
+  }, { passive: true })
 
   // ── Shelf search ──────────────────────────────────────
   const openBtn     = container.querySelector('#shelf-search-open')

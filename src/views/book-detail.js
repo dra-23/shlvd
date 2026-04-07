@@ -1,5 +1,6 @@
 import { addBook, updateBook, removeBook } from '../db.js'
 import { showSnackbar } from './shelves.js'
+import { backHandlerStack } from '../main.js'
 
 const SHELF_LABELS = { want: 'Want to Read', reading: 'Reading', read: 'Read' }
 
@@ -119,7 +120,7 @@ export function openBookDetail(book, existingShelf, onDone) {
         await updateBook(book.id || book.googleBooksId, updates)
         showSnackbar('Updated')
       }
-      closeSheet()
+      closeSheet('manual')
       onDone?.()
     } catch (err) {
       console.error(err)
@@ -132,7 +133,7 @@ export function openBookDetail(book, existingShelf, onDone) {
     try {
       await removeBook(book.id || book.googleBooksId)
       showSnackbar('Removed from shelf')
-      closeSheet()
+      closeSheet('manual')
       onDone?.()
     } catch (err) {
       console.error(err)
@@ -141,14 +142,23 @@ export function openBookDetail(book, existingShelf, onDone) {
   })
 
   // ── Close ─────────────────────────────────────────────
-  function closeSheet() {
+  history.pushState({ sheet: true }, '')
+
+  function closeSheet(source) {
+    // Remove from back stack in case of manual close
+    const idx = backHandlerStack.indexOf(closeSheet)
+    if (idx !== -1) backHandlerStack.splice(idx, 1)
+    // If manually closed, pop the history entry we pushed
+    if (source !== 'popstate') history.back()
     scrim.classList.add('closing')
     sheet.classList.add('closing')
     setTimeout(() => { scrim.remove(); sheet.remove() }, 300)
   }
 
-  scrim.addEventListener('click', closeSheet)
-  sheet.querySelector('#close-btn')?.addEventListener('click', closeSheet)
+  backHandlerStack.push(closeSheet)
+
+  scrim.addEventListener('click', () => closeSheet('manual'))
+  sheet.querySelector('#close-btn')?.addEventListener('click', () => closeSheet('manual'))
 }
 
 function buildSheetHTML(book, existingShelf) {

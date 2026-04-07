@@ -22,6 +22,18 @@ export let currentUser = null
 let activeTab = 'shelves'
 let activeViewDestroy = null
 
+// Back-gesture handler stack (sheets push onto this)
+export const backHandlerStack = []
+
+window.addEventListener('popstate', (e) => {
+  if (backHandlerStack.length > 0) {
+    backHandlerStack.pop()('popstate')
+  } else {
+    const tab = e.state?.tab || 'shelves'
+    _navigateInternal(tab)
+  }
+})
+
 const TAB_CONFIG = [
   { id: 'shelves', icon: 'auto_stories', label: 'Shelves' },
   { id: 'search',  icon: 'search',       label: 'Search'  },
@@ -51,27 +63,30 @@ function shellHTML() {
 
 // ── Router ───────────────────────────────────────────────────────────────────
 
-export function navigateTo(tab) {
+// Internal navigate — does NOT push history (used by popstate handler)
+function _navigateInternal(tab) {
   if (tab === activeTab) return
   const prev = activeTab
   activeTab = tab
 
-  // Destroy previous view's listeners
   if (activeViewDestroy) {
     activeViewDestroy()
     activeViewDestroy = null
   }
 
-  // Update nav
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab)
   })
 
-  // Determine slide direction
   const order = TAB_CONFIG.map(t => t.id)
   const direction = order.indexOf(tab) > order.indexOf(prev) ? 'left' : 'right'
-
   swapView(tab, direction)
+}
+
+export function navigateTo(tab) {
+  if (tab === activeTab) return
+  history.pushState({ tab }, '')
+  _navigateInternal(tab)
 }
 
 function swapView(tab, direction = 'left') {
@@ -123,6 +138,9 @@ onAuthStateChanged(auth, user => {
 
 function renderShell() {
   app.innerHTML = shellHTML()
+
+  // Seed history so back from home tab exits the app naturally
+  history.replaceState({ tab: 'shelves' }, '')
 
   // Nav click handlers
   document.getElementById('bottom-nav').addEventListener('click', e => {
