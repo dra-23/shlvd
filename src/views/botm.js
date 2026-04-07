@@ -5,8 +5,16 @@ function formatMonth(date) {
   if (!date) return ''
   try {
     const d = date instanceof Date ? date : new Date(date)
-    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()
   } catch { return '' }
+}
+
+function starHTML(rating) {
+  if (!rating) return ''
+  return `<div class="botm-stars">${[1,2,3,4,5].map(n =>
+    `<span class="material-symbols-rounded botm-star ${n <= rating ? 'filled' : ''}"
+      style="font-size:16px;${n <= rating ? "font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;color:#F5A623;" : 'color:var(--md-outline-variant);'}">star</span>`
+  ).join('')}</div>`
 }
 
 export function renderBotm(container) {
@@ -16,7 +24,7 @@ export function renderBotm(container) {
         <span class="top-bar-title">Book of the Month</span>
       </div>
       <div id="botm-content" style="padding:16px 16px 24px;">
-        ${skeletonGrid()}
+        ${skeletonList()}
       </div>
     </div>
   `
@@ -35,12 +43,10 @@ export function renderBotm(container) {
       return
     }
 
-    content.innerHTML = `<div class="botm-grid">${books.map(botmCardHTML).join('')}</div>`
+    content.innerHTML = `<div class="botm-list">${books.map(botmCardHTML).join('')}</div>`
 
     content.querySelectorAll('.botm-card').forEach((card, i) => {
-      card.addEventListener('click', () => {
-        openBookDetail(books[i], books[i].shelf, null)
-      })
+      card.addEventListener('click', () => openBookDetail(books[i], books[i].shelf, null))
     })
   })
 
@@ -48,42 +54,42 @@ export function renderBotm(container) {
 }
 
 function botmCardHTML(book) {
+  const month = formatMonth(book.dateCompleted)
+
   const coverHTML = book.thumbnail
     ? `<img src="${book.thumbnail}" alt="${book.title}" loading="lazy" />`
-    : `<div class="book-cover-placeholder">
-         <span class="material-symbols-rounded">menu_book</span>
-         <div class="placeholder-title">${book.title}</div>
+    : `<div class="book-cover-placeholder" style="width:100%;height:100%;">
+         <span class="material-symbols-rounded" style="font-size:28px">menu_book</span>
        </div>`
-
-  const month = formatMonth(book.dateCompleted)
 
   return `
     <div class="botm-card">
-      <div class="botm-cover">${coverHTML}</div>
-      ${month ? `<div class="botm-month-badge">${month}</div>` : ''}
+      <div class="botm-cover-wrap">
+        ${coverHTML}
+      </div>
       <div class="botm-info">
+        ${month ? `<div class="botm-month-badge">${month}</div>` : ''}
         <div class="botm-title">${book.title}</div>
         <div class="botm-author">${book.author}</div>
+        ${starHTML(book.rating)}
+        ${book.genre ? `<div class="botm-genre">${book.genre}</div>` : ''}
       </div>
+      <span class="material-symbols-rounded botm-chevron">chevron_right</span>
     </div>
   `
 }
 
-function skeletonGrid() {
-  return `
-    <div class="botm-grid">
-      ${Array.from({ length: 4 }, () => `
-        <div class="botm-card">
-          <div class="botm-cover skeleton"></div>
-          <div style="display:flex;flex-direction:column;gap:6px;padding:8px 4px;">
-            <div class="skeleton" style="height:11px;border-radius:6px;width:55%"></div>
-            <div class="skeleton" style="height:13px;border-radius:6px;width:85%"></div>
-            <div class="skeleton" style="height:11px;border-radius:6px;width:60%"></div>
-          </div>
-        </div>
-      `).join('')}
+function skeletonList() {
+  return Array.from({ length: 3 }, () => `
+    <div class="botm-card">
+      <div class="botm-cover-wrap skeleton"></div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+        <div class="skeleton" style="height:11px;border-radius:6px;width:40%"></div>
+        <div class="skeleton" style="height:15px;border-radius:6px;width:85%"></div>
+        <div class="skeleton" style="height:12px;border-radius:6px;width:55%"></div>
+      </div>
     </div>
-  `
+  `).join('')
 }
 
 export function destroyBotm() {}
