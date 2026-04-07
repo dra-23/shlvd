@@ -24,6 +24,9 @@ export function showSnackbar(msg) {
 const expandedState = { read: false }
 // Store latest read books for expand/collapse re-render
 let latestReadBooks = []
+// Pagination
+const MONTHS_PER_PAGE = 3
+let visibleMonths = MONTHS_PER_PAGE
 
 export function renderShelves(container) {
   container.innerHTML = `
@@ -142,27 +145,20 @@ function renderReadSection(container, books) {
     `
     attachCardListeners(bodyEl.querySelector('#scroll-read'), books, 'read')
   } else {
-    // Expanded: grouped by Month/Year grid
-    bodyEl.innerHTML = buildGroupedReadHTML(books)
-    bodyEl.querySelectorAll('.book-card').forEach((card, i) => {
-      const allBooks = groupedToFlat(books)
-      card.addEventListener('click', async () => {
-        try {
-          const bookData = await getBook(allBooks[i].id)
-          openBookDetail({ ...allBooks[i], ...bookData }, 'read', null)
-        } catch {
-          openBookDetail(allBooks[i], 'read', null)
-        }
-      })
-    })
+    // Expanded: grouped by Month/Year grid — paginated by month
+    visibleMonths = MONTHS_PER_PAGE
+    renderExpandedRead(bodyEl, books)
   }
 }
 
-function buildGroupedReadHTML(books) {
+function renderExpandedRead(bodyEl, books) {
   const groups = groupByMonth(books)
-  return `
+  const visible = groups.slice(0, visibleMonths)
+  const hasMore = groups.length > visibleMonths
+
+  bodyEl.innerHTML = `
     <div class="read-expanded">
-      ${groups.map(({ label, books: groupBooks }) => `
+      ${visible.map(({ label, books: groupBooks }) => `
         <div class="month-group">
           <div class="month-group-title">${label}</div>
           <div class="book-grid">
@@ -170,8 +166,31 @@ function buildGroupedReadHTML(books) {
           </div>
         </div>
       `).join('')}
+      ${hasMore ? `
+        <button class="btn btn-tonal load-more-btn" style="width:100%;height:48px;margin-top:8px;">
+          <span class="material-symbols-rounded">expand_more</span>
+          Load older months (${groups.length - visibleMonths} more)
+        </button>
+      ` : ''}
     </div>
   `
+
+  const allVisible = visible.flatMap(g => g.books)
+  bodyEl.querySelectorAll('.book-card').forEach((card, i) => {
+    card.addEventListener('click', async () => {
+      try {
+        const bookData = await getBook(allVisible[i].id)
+        openBookDetail({ ...allVisible[i], ...bookData }, 'read', null)
+      } catch {
+        openBookDetail(allVisible[i], 'read', null)
+      }
+    })
+  })
+
+  bodyEl.querySelector('.load-more-btn')?.addEventListener('click', () => {
+    visibleMonths += MONTHS_PER_PAGE
+    renderExpandedRead(bodyEl, books)
+  })
 }
 
 function groupByMonth(books) {

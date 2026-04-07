@@ -57,13 +57,21 @@ export function openBookDetail(book, existingShelf, onDone) {
   setStars(rating)
   stars.forEach((s, i) => s.addEventListener('click', () => setStars(rating === i + 1 ? 0 : i + 1)))
 
-  // ── BotM toggle ───────────────────────────────────────
+  // ── BotM toggle (auto-saves if book already on shelf) ────
   const botmBtn = sheet.querySelector('#botm-btn')
-  const setBotm = val => {
+  const setBotm = async (val) => {
     isBOTM = val
     botmBtn.classList.toggle('active', isBOTM)
     botmBtn.querySelector('.material-symbols-rounded').style.fontVariationSettings =
       isBOTM ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+    if (existingShelf) {
+      try {
+        await updateBook(book.id || book.googleBooksId, { isBOTM })
+        showSnackbar(isBOTM ? '✦ Book of the Month!' : 'BotM removed')
+      } catch (err) {
+        console.error('BotM auto-save error:', err)
+      }
+    }
   }
   setBotm(isBOTM)
   botmBtn.addEventListener('click', () => setBotm(!isBOTM))

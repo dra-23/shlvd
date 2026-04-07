@@ -1173,7 +1173,7 @@ html, body {
 
 .botm-cover {
   width: 100%;
-  aspect-ratio: 2/3;
+  height: 150px;
   overflow: hidden;
   background: var(--md-primary-container);
 }
