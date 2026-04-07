@@ -4,6 +4,7 @@ import { renderAuth } from './views/auth.js'
 import { renderShelves, destroyShelves } from './views/shelves.js'
 import { renderSearch, destroySearch } from './views/search.js'
 import { renderProfile, destroyProfile } from './views/profile.js'
+import { renderBotm, destroyBotm } from './views/botm.js'
 
 // Register service worker
 if ('serviceWorker' in navigator) {
@@ -21,6 +22,7 @@ let activeViewDestroy = null
 const TAB_CONFIG = [
   { id: 'shelves', icon: 'auto_stories', label: 'Shelves' },
   { id: 'search',  icon: 'search',       label: 'Search'  },
+  { id: 'botm',    icon: 'auto_awesome', label: 'BotM'    },
   { id: 'profile', icon: 'person',       label: 'Profile' },
 ]
 
@@ -98,6 +100,7 @@ function mountView(tab, el) {
   switch (tab) {
     case 'shelves': return renderShelves(el)
     case 'search':  return renderSearch(el)
+    case 'botm':    return renderBotm(el)
     case 'profile': return renderProfile(el)
   }
 }

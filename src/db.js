@@ -12,28 +12,38 @@ import {
   serverTimestamp,
 } from 'firebase/firestore'
 
-// Reads from the existing root 'books' collection
 const booksCol = () => collection(db, 'books')
+
+// Convert Firestore Timestamp or plain object to JS Date
+function toDate(ts) {
+  if (!ts) return null
+  if (ts.toDate) return ts.toDate()
+  if (ts.seconds) return new Date(ts.seconds * 1000)
+  return null
+}
 
 // Map existing DB fields → shlvd internal format
 function normalize(id, d) {
   return {
     id,
     googleBooksId: id,
-    title:     d.title   || '',
-    author:    d.author  || '',
-    thumbnail: d.cover   || '',
-    pageCount: d.pages   || 0,
-    shelf:     normalizeStatus(d.status),
-    progress:  d.progress || 0,
-    rating:    d.rating  || 0,
-    notes:     d.review  || '',
-    addedAt:   d.addedAt || d.dateCompleted || null,
-    finishedAt: d.dateCompleted || null,
+    title:         d.title        || '',
+    author:        d.author       || '',
+    thumbnail:     d.cover        || '',
+    pageCount:     d.pages        || 0,
+    shelf:         normalizeStatus(d.status),
+    progress:      d.progress     || 0,
+    rating:        d.rating       || 0,
+    notes:         d.review       || '',
+    isBOTM:        d.isBOTM       || false,
+    genre:         d.genre        || '',
+    description:   d.description  || '',
+    dateReleased:  d.dateReleased  || '',
+    dateCompleted: toDate(d.dateCompleted),
+    addedAt:       toDate(d.addedAt) || toDate(d.dateCompleted),
   }
 }
 
-// Handle variations in status values from the existing app
 function normalizeStatus(status) {
   if (!status) return 'want'
   const s = status.toLowerCase()
@@ -68,13 +78,13 @@ export const addBook = async (bookData) => {
 export const updateBook = async (id, updates) => {
   const ref = doc(booksCol(), id)
   const dbUpdates = {}
-  if ('shelf'    in updates) dbUpdates.status = updates.shelf
-  if ('rating'   in updates) dbUpdates.rating = updates.rating
-  if ('notes'    in updates) dbUpdates.review = updates.notes
-  if ('progress' in updates) dbUpdates.progress = updates.progress
-  if (updates.shelf === 'read' && !updates._keepDate) {
-    dbUpdates.dateCompleted = serverTimestamp()
-  }
+  if ('shelf'         in updates) dbUpdates.status        = updates.shelf
+  if ('rating'        in updates) dbUpdates.rating        = updates.rating
+  if ('notes'         in updates) dbUpdates.review        = updates.notes
+  if ('progress'      in updates) dbUpdates.progress      = updates.progress
+  if ('isBOTM'        in updates) dbUpdates.isBOTM        = updates.isBOTM
+  if ('genre'         in updates) dbUpdates.genre         = updates.genre
+  if ('dateCompleted' in updates) dbUpdates.dateCompleted = updates.dateCompleted
   await updateDoc(ref, dbUpdates)
 }
 
@@ -91,13 +101,22 @@ export const getBook = async (id) => {
 
 /** Real-time listener for a specific shelf */
 export const watchShelf = (shelf, callback) => {
-  // Map shlvd shelf name back to the DB status field value
-  const statusMap = { want: 'want', reading: 'reading', read: 'read' }
-  const q = query(booksCol(), where('status', '==', statusMap[shelf] || shelf))
+  const q = query(booksCol(), where('status', '==', shelf))
   return onSnapshot(q, snap => {
     const books = snap.docs
       .map(d => normalize(d.id, d.data()))
-      .sort((a, b) => (b.addedAt?.seconds ?? 0) - (a.addedAt?.seconds ?? 0))
+      .sort((a, b) => (b.addedAt?.getTime?.() ?? 0) - (a.addedAt?.getTime?.() ?? 0))
+    callback(books)
+  })
+}
+
+/** Real-time listener for BotM books */
+export const watchBotm = (callback) => {
+  const q = query(booksCol(), where('isBOTM', '==', true))
+  return onSnapshot(q, snap => {
+    const books = snap.docs
+      .map(d => normalize(d.id, d.data()))
+      .sort((a, b) => (b.dateCompleted?.getTime?.() ?? 0) - (a.dateCompleted?.getTime?.() ?? 0))
     callback(books)
   })
 }

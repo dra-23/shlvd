@@ -1,16 +1,25 @@
-import { addBook, updateBook, removeBook, getBook } from '../db.js'
+import { addBook, updateBook, removeBook } from '../db.js'
 import { showSnackbar } from './shelves.js'
 
 const SHELF_LABELS = { want: 'Want to Read', reading: 'Reading', read: 'Read' }
 
-/**
- * Open the book detail bottom sheet.
- * @param {Object} book - normalized book (from Google Books API or Firestore)
- * @param {string|null} existingShelf - current shelf if already added, else null
- * @param {Function} onDone - called after any change (add/update/remove)
- */
+function tsToDateInput(date) {
+  if (!date) return ''
+  try {
+    const d = date instanceof Date ? date : new Date(date)
+    return d.toISOString().split('T')[0]
+  } catch { return '' }
+}
+
+function formatDisplayDate(date) {
+  if (!date) return ''
+  try {
+    const d = date instanceof Date ? date : new Date(date)
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  } catch { return '' }
+}
+
 export function openBookDetail(book, existingShelf, onDone) {
-  // Build scrim + sheet
   const scrim = document.createElement('div')
   scrim.className = 'sheet-scrim'
 
@@ -21,50 +30,69 @@ export function openBookDetail(book, existingShelf, onDone) {
   document.body.appendChild(scrim)
   document.body.appendChild(sheet)
 
-  // State
+  // ── State ─────────────────────────────────────────────
   let selectedShelf = existingShelf || 'want'
   let rating = book.rating || 0
-  let isDirty = false
+  let isBOTM = book.isBOTM || false
 
-  // ── Shelf chip selection ──────────────────────────────
+  // ── Shelf chips ───────────────────────────────────────
   sheet.querySelectorAll('.shelf-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       sheet.querySelectorAll('.shelf-chip').forEach(c => c.classList.remove('selected'))
       chip.classList.add('selected')
       selectedShelf = chip.dataset.shelf
-
-      // Show/hide progress section
-      const progressSection = sheet.querySelector('#progress-section')
-      if (progressSection) {
-        progressSection.style.display = selectedShelf === 'reading' ? 'block' : 'none'
-      }
-      isDirty = true
+      sheet.querySelector('#progress-section').style.display =
+        selectedShelf === 'reading' ? 'block' : 'none'
+      sheet.querySelector('#date-completed-section').style.display =
+        selectedShelf === 'read' ? 'block' : 'none'
     })
   })
 
   // ── Star rating ───────────────────────────────────────
   const stars = sheet.querySelectorAll('.star-btn')
-  const setStars = (n) => {
+  const setStars = n => {
     rating = n
     stars.forEach((s, i) => s.classList.toggle('filled', i < n))
   }
   setStars(rating)
+  stars.forEach((s, i) => s.addEventListener('click', () => setStars(rating === i + 1 ? 0 : i + 1)))
 
-  stars.forEach((star, i) => {
-    star.addEventListener('click', () => {
-      setStars(rating === i + 1 ? 0 : i + 1) // tap same star to clear
-      isDirty = true
+  // ── BotM toggle ───────────────────────────────────────
+  const botmBtn = sheet.querySelector('#botm-btn')
+  const setBotm = val => {
+    isBOTM = val
+    botmBtn.classList.toggle('active', isBOTM)
+    botmBtn.querySelector('.material-symbols-rounded').style.fontVariationSettings =
+      isBOTM ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+  }
+  setBotm(isBOTM)
+  botmBtn.addEventListener('click', () => setBotm(!isBOTM))
+
+  // ── Description expand ────────────────────────────────
+  const descEl = sheet.querySelector('#description-text')
+  const descBtn = sheet.querySelector('#desc-toggle')
+  if (descEl && descBtn) {
+    descBtn.addEventListener('click', () => {
+      const expanded = descEl.classList.toggle('expanded')
+      descBtn.textContent = expanded ? 'Show less' : 'Show more'
     })
-  })
+  }
 
-  // ── Save button ───────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────
   sheet.querySelector('#save-btn').addEventListener('click', async () => {
     const progress = parseInt(sheet.querySelector('#progress-input')?.value || '0', 10)
     const notes = sheet.querySelector('#notes-input')?.value.trim() || ''
+    const genre = sheet.querySelector('#genre-input')?.value.trim() || ''
+    const dateStr = sheet.querySelector('#date-completed-input')?.value
+
+    const updates = { shelf: selectedShelf, rating, notes, isBOTM, genre }
+    if (selectedShelf === 'reading') updates.progress = progress
+    if (selectedShelf === 'read' && dateStr) {
+      updates.dateCompleted = new Date(dateStr + 'T12:00:00')
+    }
 
     try {
       if (!existingShelf) {
-        // New book
         await addBook({
           googleBooksId: book.googleBooksId,
           title: book.title,
@@ -73,18 +101,12 @@ export function openBookDetail(book, existingShelf, onDone) {
           pageCount: book.pageCount || 0,
           shelf: selectedShelf,
         })
-        if (rating || notes) {
-          await updateBook(book.googleBooksId, { rating, notes })
-        }
-        if (selectedShelf === 'reading' && progress > 0) {
-          await updateBook(book.googleBooksId, { progress })
+        if (rating || notes || isBOTM || genre || updates.dateCompleted) {
+          await updateBook(book.googleBooksId, updates)
         }
         showSnackbar(`Added to ${SHELF_LABELS[selectedShelf]}`)
       } else {
-        // Existing — update everything
-        const updates = { shelf: selectedShelf, rating, notes }
-        if (selectedShelf === 'reading') updates.progress = progress
-        await updateBook(book.googleBooksId, updates)
+        await updateBook(book.id || book.googleBooksId, updates)
         showSnackbar('Updated')
       }
       closeSheet()
@@ -95,30 +117,24 @@ export function openBookDetail(book, existingShelf, onDone) {
     }
   })
 
-  // ── Remove button ─────────────────────────────────────
-  const removeBtn = sheet.querySelector('#remove-btn')
-  if (removeBtn) {
-    removeBtn.addEventListener('click', async () => {
-      try {
-        await removeBook(book.googleBooksId)
-        showSnackbar('Removed from shelf')
-        closeSheet()
-        onDone?.()
-      } catch (err) {
-        console.error(err)
-        showSnackbar('Something went wrong')
-      }
-    })
-  }
+  // ── Remove ────────────────────────────────────────────
+  sheet.querySelector('#remove-btn')?.addEventListener('click', async () => {
+    try {
+      await removeBook(book.id || book.googleBooksId)
+      showSnackbar('Removed from shelf')
+      closeSheet()
+      onDone?.()
+    } catch (err) {
+      console.error(err)
+      showSnackbar('Something went wrong')
+    }
+  })
 
   // ── Close ─────────────────────────────────────────────
   function closeSheet() {
     scrim.classList.add('closing')
     sheet.classList.add('closing')
-    setTimeout(() => {
-      scrim.remove()
-      sheet.remove()
-    }, 300)
+    setTimeout(() => { scrim.remove(); sheet.remove() }, 300)
   }
 
   scrim.addEventListener('click', closeSheet)
@@ -132,40 +148,11 @@ function buildSheetHTML(book, existingShelf) {
          <span class="material-symbols-rounded">menu_book</span>
        </div>`
 
-  const shelfButtons = Object.entries(SHELF_LABELS).map(([id, label]) => `
-    <button class="chip shelf-chip ${existingShelf === id ? 'selected' : ''}" data-shelf="${id}">
-      ${label}
-    </button>
+  const shelfChips = Object.entries(SHELF_LABELS).map(([id, label]) => `
+    <button class="chip shelf-chip ${existingShelf === id ? 'selected' : ''}" data-shelf="${id}">${label}</button>
   `).join('')
 
-  const progressHTML = `
-    <div id="progress-section" style="display:${existingShelf === 'reading' ? 'block' : 'none'}">
-      <div class="sheet-section-label">Progress</div>
-      <div class="progress-row">
-        <div class="progress-input-wrap">
-          <span class="material-symbols-rounded" style="font-size:20px;color:var(--md-on-surface-variant)">bookmark</span>
-          <input
-            type="number"
-            class="progress-num-input"
-            id="progress-input"
-            min="0"
-            max="${book.pageCount || 9999}"
-            value="${book.progress || 0}"
-            placeholder="0"
-          />
-          <span class="progress-sep">/</span>
-          <span class="progress-total">${book.pageCount ? `${book.pageCount} pp` : '—'}</span>
-        </div>
-      </div>
-    </div>
-  `
-
-  const removeHTML = existingShelf
-    ? `<button class="btn btn-danger" id="remove-btn" style="width:100%">
-         <span class="material-symbols-rounded">delete</span>
-         Remove from shelf
-       </button>`
-    : ''
+  const hasDescription = book.description && book.description !== 'No description available.'
 
   return `
     <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
@@ -175,7 +162,7 @@ function buildSheetHTML(book, existingShelf) {
       <div class="sheet-meta">
         <div class="sheet-title">${book.title}</div>
         <div class="sheet-author">${book.author}</div>
-        ${book.publishedDate ? `<div class="body-small mt-4" style="color:var(--md-on-surface-variant)">${book.publishedDate.substring(0,4)}</div>` : ''}
+        ${book.dateReleased ? `<div class="body-small mt-4" style="color:var(--md-on-surface-variant)">Published ${book.dateReleased}</div>` : ''}
       </div>
       <button class="icon-btn" id="close-btn">
         <span class="material-symbols-rounded">close</span>
@@ -183,13 +170,36 @@ function buildSheetHTML(book, existingShelf) {
     </div>
 
     <div class="sheet-body">
+
+      <!-- Shelf -->
       <div>
         <div class="sheet-section-label">Shelf</div>
-        <div class="chips">${shelfButtons}</div>
+        <div class="chips">${shelfChips}</div>
       </div>
 
-      ${progressHTML}
+      <!-- Progress (reading only) -->
+      <div id="progress-section" style="display:${existingShelf === 'reading' ? 'block' : 'none'}">
+        <div class="sheet-section-label">Progress</div>
+        <div class="progress-row">
+          <div class="progress-input-wrap">
+            <span class="material-symbols-rounded" style="font-size:20px;color:var(--md-on-surface-variant)">bookmark</span>
+            <input type="number" class="progress-num-input" id="progress-input"
+              min="0" max="${book.pageCount || 9999}"
+              value="${book.progress || 0}" placeholder="0" />
+            <span class="progress-sep">/</span>
+            <span class="progress-total">${book.pageCount ? `${book.pageCount} pp` : '—'}</span>
+          </div>
+        </div>
+      </div>
 
+      <!-- Date Completed (read only) -->
+      <div id="date-completed-section" style="display:${existingShelf === 'read' ? 'block' : 'none'}">
+        <div class="sheet-section-label">Date Completed</div>
+        <input type="date" class="date-input" id="date-completed-input"
+          value="${tsToDateInput(book.dateCompleted)}" />
+      </div>
+
+      <!-- Rating -->
       <div>
         <div class="sheet-section-label">Rating</div>
         <div class="star-rating">
@@ -201,21 +211,47 @@ function buildSheetHTML(book, existingShelf) {
         </div>
       </div>
 
+      <!-- Genre -->
       <div>
-        <div class="sheet-section-label">Notes</div>
-        <textarea
-          class="notes-textarea"
-          id="notes-input"
-          placeholder="Your thoughts…"
-        >${book.notes || ''}</textarea>
+        <div class="sheet-section-label">Genre</div>
+        <input type="text" class="genre-input-field" id="genre-input"
+          value="${book.genre || ''}" placeholder="e.g. Fantasy, Literary Fiction…" />
       </div>
 
+      <!-- BotM toggle -->
+      <button class="botm-toggle-btn" id="botm-btn">
+        <span class="material-symbols-rounded">auto_awesome</span>
+        Book of the Month
+      </button>
+
+      <!-- Notes -->
+      <div>
+        <div class="sheet-section-label">Notes</div>
+        <textarea class="notes-textarea" id="notes-input"
+          placeholder="Your thoughts…">${book.notes || ''}</textarea>
+      </div>
+
+      ${hasDescription ? `
+      <!-- Description -->
+      <div>
+        <div class="sheet-section-label">Description</div>
+        <div class="description-text" id="description-text">${book.description}</div>
+        <button class="btn btn-text" id="desc-toggle" style="padding:4px 0;margin-top:4px;">Show more</button>
+      </div>
+      ` : ''}
+
+      <!-- Save -->
       <button class="btn btn-filled" id="save-btn" style="width:100%;height:48px">
         <span class="material-symbols-rounded">${existingShelf ? 'save' : 'add'}</span>
         ${existingShelf ? 'Save changes' : 'Add to shelf'}
       </button>
 
-      ${removeHTML}
+      ${existingShelf ? `
+      <button class="btn btn-danger" id="remove-btn" style="width:100%">
+        <span class="material-symbols-rounded">delete</span>
+        Remove from shelf
+      </button>` : ''}
+
     </div>
   `
 }

@@ -20,6 +20,11 @@ export function showSnackbar(msg) {
   snackbarTimeout = setTimeout(() => el.remove(), 3000)
 }
 
+// Per-shelf expand state
+const expandedState = { read: false }
+// Store latest read books for expand/collapse re-render
+let latestReadBooks = []
+
 export function renderShelves(container) {
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;min-height:100%;">
@@ -32,9 +37,15 @@ export function renderShelves(container) {
             <div class="shelf-header">
               <span class="shelf-title">${s.label}</span>
               <span class="shelf-count" id="count-${s.id}"></span>
+              ${s.id === 'read' ? `<button class="btn btn-text expand-read-btn" id="expand-read-btn" style="margin-left:auto;padding:0 8px;font-size:0.8125rem;">
+                <span class="material-symbols-rounded" style="font-size:18px">expand_more</span>
+                View all
+              </button>` : ''}
             </div>
-            <div class="shelf-scroll" id="scroll-${s.id}">
-              ${skeletonCards(3)}
+            <div id="shelf-body-${s.id}">
+              <div class="shelf-scroll" id="scroll-${s.id}">
+                ${skeletonCards(3)}
+              </div>
             </div>
           </div>
           <div class="divider"></div>
@@ -43,17 +54,29 @@ export function renderShelves(container) {
     </div>
   `
 
-  const unsubscribers = []
+  // Expand/collapse button for Read
+  container.querySelector('#expand-read-btn')?.addEventListener('click', () => {
+    expandedState.read = !expandedState.read
+    renderReadSection(container, latestReadBooks)
+  })
 
+  const unsubscribers = []
   SHELVES.forEach(shelf => {
     const unsub = watchShelf(shelf.id, books => {
-      renderShelfBooks(container, shelf, books)
+      if (shelf.id === 'read') {
+        latestReadBooks = books
+        renderReadSection(container, books)
+      } else {
+        renderShelfBooks(container, shelf, books)
+      }
     })
     unsubscribers.push(unsub)
   })
 
   return () => unsubscribers.forEach(u => u())
 }
+
+// ── Render a normal shelf ────────────────────────────────────────────────────
 
 function renderShelfBooks(container, shelf, books) {
   const scrollEl = container.querySelector(`#scroll-${shelf.id}`)
@@ -76,20 +99,109 @@ function renderShelfBooks(container, shelf, books) {
   }
 
   scrollEl.innerHTML = books.map(book => bookCardHTML(book, shelf.id)).join('')
+  attachCardListeners(scrollEl, books, shelf.id)
+}
 
-  scrollEl.querySelectorAll('.book-card').forEach((card, i) => {
+// ── Render the Read shelf (normal or expanded) ───────────────────────────────
+
+function renderReadSection(container, books) {
+  const countEl  = container.querySelector('#count-read')
+  const expandBtn = container.querySelector('#expand-read-btn')
+  const bodyEl   = container.querySelector('#shelf-body-read')
+  if (!bodyEl) return
+
+  if (countEl) countEl.textContent = books.length ? `${books.length}` : ''
+
+  if (expandBtn) {
+    expandBtn.innerHTML = expandedState.read
+      ? `<span class="material-symbols-rounded" style="font-size:18px">expand_less</span> Collapse`
+      : `<span class="material-symbols-rounded" style="font-size:18px">expand_more</span> View all`
+  }
+
+  if (!books.length) {
+    bodyEl.innerHTML = `
+      <div class="shelf-scroll">
+        <div class="shelf-empty">
+          No books here yet —
+          <button class="btn btn-text" style="padding:0 4px;font-size:0.875rem;" data-goto="search">
+            search to add one
+          </button>
+        </div>
+      </div>
+    `
+    bodyEl.querySelector('[data-goto]')?.addEventListener('click', () => navigateTo('search'))
+    return
+  }
+
+  if (!expandedState.read) {
+    // Normal: horizontal scroll of recent books
+    bodyEl.innerHTML = `
+      <div class="shelf-scroll" id="scroll-read">
+        ${books.map(book => bookCardHTML(book, 'read')).join('')}
+      </div>
+    `
+    attachCardListeners(bodyEl.querySelector('#scroll-read'), books, 'read')
+  } else {
+    // Expanded: grouped by Month/Year grid
+    bodyEl.innerHTML = buildGroupedReadHTML(books)
+    bodyEl.querySelectorAll('.book-card').forEach((card, i) => {
+      const allBooks = groupedToFlat(books)
+      card.addEventListener('click', async () => {
+        try {
+          const bookData = await getBook(allBooks[i].id)
+          openBookDetail({ ...allBooks[i], ...bookData }, 'read', null)
+        } catch {
+          openBookDetail(allBooks[i], 'read', null)
+        }
+      })
+    })
+  }
+}
+
+function buildGroupedReadHTML(books) {
+  const groups = groupByMonth(books)
+  return `
+    <div class="read-expanded">
+      ${groups.map(({ label, books: groupBooks }) => `
+        <div class="month-group">
+          <div class="month-group-title">${label}</div>
+          <div class="book-grid">
+            ${groupBooks.map(b => bookCardHTML(b, 'read')).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `
+}
+
+function groupByMonth(books) {
+  const map = new Map()
+  books.forEach(book => {
+    const d = book.dateCompleted
+    const key = d
+      ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : 'Unknown'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(book)
+  })
+  return Array.from(map.entries()).map(([label, books]) => ({ label, books }))
+}
+
+// Returns books in the same order they appear in the grouped view
+function groupedToFlat(books) {
+  return groupByMonth(books).flatMap(g => g.books)
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function attachCardListeners(container, books, shelfId) {
+  container.querySelectorAll('.book-card').forEach((card, i) => {
     card.addEventListener('click', async () => {
       try {
         const bookData = await getBook(books[i].id)
-        openBookDetail(
-          { ...books[i], ...bookData },
-          shelf.id,
-          null // shelves auto-update via onSnapshot
-        )
-      } catch (err) {
-        console.error('getBook error:', err)
-        // Fall back to the data we already have from the shelf listener
-        openBookDetail(books[i], shelf.id, null)
+        openBookDetail({ ...books[i], ...bookData }, shelfId, null)
+      } catch {
+        openBookDetail(books[i], shelfId, null)
       }
     })
   })
@@ -107,13 +219,18 @@ function bookCardHTML(book, shelf) {
     ? `<div class="book-progress">
          <div class="book-progress-fill" style="width:${Math.round((book.progress / book.pageCount) * 100)}%"></div>
        </div>`
-    : shelf === 'reading'
-    ? ''
+    : ''
+
+  const botmBadge = book.isBOTM
+    ? `<div class="botm-badge"><span class="material-symbols-rounded">auto_awesome</span></div>`
     : ''
 
   return `
     <div class="book-card">
-      <div class="book-cover">${coverHTML}</div>
+      <div class="book-cover">
+        ${coverHTML}
+        ${botmBadge}
+      </div>
       <div class="book-card-info">
         <div class="book-card-title">${book.title}</div>
         <div class="book-card-author">${book.author}</div>
@@ -132,7 +249,6 @@ function skeletonCards(n) {
         <div class="skeleton" style="height:10px;border-radius:6px;width:60%"></div>
       </div>
     </div>
-  `).join('')
-}
+  `).join('')}
 
 export function destroyShelves() {}
