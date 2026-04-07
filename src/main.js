@@ -6,8 +6,9 @@ import { renderSearch, destroySearch } from './views/search.js'
 import { renderProfile, destroyProfile } from './views/profile.js'
 import { renderBotm, destroyBotm } from './views/botm.js'
 
-// Register service worker
-if ('serviceWorker' in navigator) {
+// Register service worker in production only — skip during local dev
+// so that git pull + npm run dev always shows fresh changes on refresh
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
   })
