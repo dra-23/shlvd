@@ -59,11 +59,15 @@ export function openBookDetail(book, existingShelf, onDone) {
 
   // ── BotM toggle (auto-saves if book already on shelf) ────
   const botmBtn = sheet.querySelector('#botm-btn')
-  const setBotm = async (val) => {
-    isBOTM = val
-    botmBtn.classList.toggle('active', isBOTM)
+  const applyBotmUI = (val) => {
+    botmBtn.classList.toggle('active', val)
     botmBtn.querySelector('.material-symbols-rounded').style.fontVariationSettings =
-      isBOTM ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+      val ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+  }
+  applyBotmUI(isBOTM)
+  botmBtn.addEventListener('click', async () => {
+    isBOTM = !isBOTM
+    applyBotmUI(isBOTM)
     if (existingShelf) {
       try {
         await updateBook(book.id || book.googleBooksId, { isBOTM })
@@ -72,9 +76,7 @@ export function openBookDetail(book, existingShelf, onDone) {
         console.error('BotM auto-save error:', err)
       }
     }
-  }
-  setBotm(isBOTM)
-  botmBtn.addEventListener('click', () => setBotm(!isBOTM))
+  })
 
   // ── Description expand ────────────────────────────────
   const descEl = sheet.querySelector('#description-text')
