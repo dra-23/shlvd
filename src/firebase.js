@@ -2,7 +2,8 @@ import { initializeApp } from 'firebase/app'
 import {
   getAuth,
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth'
@@ -26,6 +27,7 @@ export const db = getFirestore(app)
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
 
-export const signInWithGoogle = () => signInWithPopup(auth, googleProvider)
+export const signInWithGoogle = () => signInWithRedirect(auth, googleProvider)
+export const handleRedirectResult = () => getRedirectResult(auth)
 export const signOutUser = () => signOut(auth)
 export { onAuthStateChanged }

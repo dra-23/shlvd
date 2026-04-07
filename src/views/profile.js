@@ -7,21 +7,13 @@ export function renderProfile(container) {
 
   // Real-time stats
   const unsub = watchAllBooks(books => {
-    const stats = {
-      want:    books.filter(b => b.shelf === 'want').length,
-      reading: books.filter(b => b.shelf === 'reading').length,
-      read:    books.filter(b => b.shelf === 'read').length,
-    }
-    const grid = container.querySelector('.stats-grid')
-    if (grid) grid.outerHTML = buildStatsGrid(stats)
-    // Re-inject since outerHTML replaces the element
-    container.querySelector('.stats-placeholder')?.replaceWith(
-      Object.assign(document.createElement('div'), { innerHTML: buildStatsGrid(stats) }).firstElementChild
-    )
-    // Simpler: just update numbers
-    container.querySelector('[data-stat="want"]')  && (container.querySelector('[data-stat="want"]').textContent  = stats.want)
-    container.querySelector('[data-stat="reading"]') && (container.querySelector('[data-stat="reading"]').textContent = stats.reading)
-    container.querySelector('[data-stat="read"]')  && (container.querySelector('[data-stat="read"]').textContent  = stats.read)
+    const want    = books.filter(b => b.shelf === 'want').length
+    const reading = books.filter(b => b.shelf === 'reading').length
+    const read    = books.filter(b => b.shelf === 'read').length
+    const el = s => container.querySelector(`[data-stat="${s}"]`)
+    if (el('want'))    el('want').textContent    = want
+    if (el('reading')) el('reading').textContent = reading
+    if (el('read'))    el('read').textContent    = read
   })
 
   container.querySelector('#sign-out-btn').addEventListener('click', async () => {

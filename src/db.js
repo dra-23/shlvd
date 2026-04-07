@@ -8,7 +8,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore'
@@ -55,14 +54,13 @@ export const getBook = async (googleBooksId) => {
 
 /** Real-time listener for a specific shelf */
 export const watchShelf = (shelf, callback) => {
-  const q = query(
-    booksCol(),
-    where('shelf', '==', shelf),
-    orderBy('addedAt', 'desc')
-  )
-  return onSnapshot(q, snap =>
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-  )
+  const q = query(booksCol(), where('shelf', '==', shelf))
+  return onSnapshot(q, snap => {
+    const books = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.addedAt?.seconds ?? 0) - (a.addedAt?.seconds ?? 0))
+    callback(books)
+  })
 }
 
 /** Real-time listener for all books (used for stats) */

@@ -1,6 +1,9 @@
-import { signInWithGoogle } from '../firebase.js'
+import { signInWithGoogle, handleRedirectResult } from '../firebase.js'
 
 export function renderAuth(container) {
+  // Handle return from Google redirect
+  handleRedirectResult().catch(err => console.error('Redirect result error:', err))
+
   container.innerHTML = `
     <div class="auth-screen">
       <div class="auth-illustration">📚</div>
@@ -18,11 +21,7 @@ export function renderAuth(container) {
     </div>
   `
 
-  container.querySelector('#google-sign-in').addEventListener('click', async () => {
-    try {
-      await signInWithGoogle()
-    } catch (err) {
-      console.error('Sign-in error:', err)
-    }
+  container.querySelector('#google-sign-in').addEventListener('click', () => {
+    signInWithGoogle().catch(err => console.error('Sign-in error:', err))
   })
 }
