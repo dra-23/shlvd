@@ -1,9 +1,6 @@
-import { signInWithGoogle, handleRedirectResult } from '../firebase.js'
+import { signInWithGoogle } from '../firebase.js'
 
 export function renderAuth(container) {
-  // Handle return from Google redirect
-  handleRedirectResult().catch(err => console.error('Redirect result error:', err))
-
   container.innerHTML = `
     <div class="auth-screen">
       <div class="auth-illustration">📚</div>
