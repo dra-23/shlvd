@@ -32,20 +32,15 @@ let visibleMonths = MONTHS_PER_PAGE
 export function renderShelves(container) {
   container.innerHTML = `
     <div class="shelves-root">
-      <div class="top-bar" id="shelves-top-bar">
-        <span class="top-bar-title">shlvd</span>
-        <button class="icon-btn" id="shelf-search-open">
-          <span class="material-symbols-rounded">search</span>
-        </button>
-      </div>
-
-      <!-- Search overlay -->
-      <div id="shelf-search-bar" style="display:none;">
-        <div class="search-bar" style="margin:8px 16px;">
+      <div class="shelves-top">
+        <div class="shelves-title-row">
+          <span class="top-bar-title">shlvd</span>
+        </div>
+        <div class="search-bar shelves-search-bar">
           <span class="material-symbols-rounded">search</span>
           <input class="search-input" id="shelf-search-input" type="search"
             placeholder="Search your library…" autocomplete="off" />
-          <button class="icon-btn" id="shelf-search-close">
+          <button class="icon-btn shelf-search-clear" id="shelf-search-clear" style="display:none;">
             <span class="material-symbols-rounded">close</span>
           </button>
         </div>
@@ -65,7 +60,7 @@ export function renderShelves(container) {
       </div>
 
       <!-- Tab panels -->
-      <div id="shelves-content" style="flex:1;overflow-y:auto;">
+      <div id="shelves-content">
         ${TABS.map(t => `
           <div class="shelf-panel ${t.id === activeTab ? 'active' : ''}" id="panel-${t.id}">
             <div class="book-grid panel-grid" id="grid-${t.id}">
@@ -95,8 +90,7 @@ export function renderShelves(container) {
   function positionIndicator() {
     const activeBtn = tabBar.querySelector('.shelf-tab.active')
     if (!activeBtn || !indicator) return
-    indicator.style.width  = `${activeBtn.offsetWidth}px`
-    indicator.style.left   = `${activeBtn.offsetLeft}px`
+    indicator.style.left = `${activeBtn.offsetLeft + activeBtn.offsetWidth / 2}px`
   }
 
   tabBar.querySelectorAll('.shelf-tab').forEach(btn => {
@@ -127,41 +121,39 @@ export function renderShelves(container) {
   }, { passive: true })
 
   // ── Shelf search ──────────────────────────────────────
-  const openBtn     = container.querySelector('#shelf-search-open')
-  const closeBtn    = container.querySelector('#shelf-search-close')
-  const searchBar   = container.querySelector('#shelf-search-bar')
   const searchInput = container.querySelector('#shelf-search-input')
+  const clearBtn    = container.querySelector('#shelf-search-clear')
   const resultsEl   = container.querySelector('#shelf-search-results')
   const contentEl   = container.querySelector('#shelves-content')
   const tabBarEl    = container.querySelector('#shelf-tab-bar')
   const indicatorEl = container.querySelector('.shelf-tab-indicator-track')
 
-  openBtn.addEventListener('click', () => {
-    searchBar.style.display   = 'block'
-    resultsEl.style.display   = 'block'
-    contentEl.style.display   = 'none'
-    tabBarEl.style.display    = 'none'
-    indicatorEl.style.display = 'none'
-    openBtn.style.display     = 'none'
-    setTimeout(() => searchInput.focus(), 50)
-  })
-
-  const closeSearch = () => {
-    searchBar.style.display   = 'none'
-    resultsEl.style.display   = 'none'
-    contentEl.style.display   = 'block'
-    tabBarEl.style.display    = 'flex'
-    indicatorEl.style.display = 'block'
-    openBtn.style.display     = 'flex'
+  clearBtn.addEventListener('click', () => {
     searchInput.value = ''
+    clearBtn.style.display = 'none'
+    resultsEl.style.display = 'none'
     resultsEl.innerHTML = ''
-  }
-
-  closeBtn.addEventListener('click', closeSearch)
+    contentEl.style.display = 'block'
+    tabBarEl.style.display = 'flex'
+    indicatorEl.style.display = 'block'
+    searchInput.focus()
+  })
 
   searchInput.addEventListener('input', () => {
     const q = searchInput.value.trim().toLowerCase()
-    if (!q) { resultsEl.innerHTML = ''; return }
+    clearBtn.style.display = q ? 'flex' : 'none'
+    if (!q) {
+      resultsEl.style.display = 'none'
+      resultsEl.innerHTML = ''
+      contentEl.style.display = 'block'
+      tabBarEl.style.display = 'flex'
+      indicatorEl.style.display = 'block'
+      return
+    }
+    resultsEl.style.display = 'block'
+    contentEl.style.display = 'none'
+    tabBarEl.style.display = 'none'
+    indicatorEl.style.display = 'none'
     const all = [...allShelfBooks.reading, ...allShelfBooks.want, ...allShelfBooks.read]
     const hits = all.filter(b =>
       b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q)
