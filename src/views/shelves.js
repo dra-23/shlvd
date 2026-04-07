@@ -79,12 +79,18 @@ function renderShelfBooks(container, shelf, books) {
 
   scrollEl.querySelectorAll('.book-card').forEach((card, i) => {
     card.addEventListener('click', async () => {
-      const bookData = await getBook(books[i].id)
-      openBookDetail(
-        { ...books[i], ...bookData },
-        shelf.id,
-        null // shelves auto-update via onSnapshot
-      )
+      try {
+        const bookData = await getBook(books[i].id)
+        openBookDetail(
+          { ...books[i], ...bookData },
+          shelf.id,
+          null // shelves auto-update via onSnapshot
+        )
+      } catch (err) {
+        console.error('getBook error:', err)
+        // Fall back to the data we already have from the shelf listener
+        openBookDetail(books[i], shelf.id, null)
+      }
     })
   })
 }

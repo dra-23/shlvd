@@ -66,40 +66,46 @@ export function renderSearch(container) {
 }
 
 async function doSearch(query, resultsEl) {
+  let books
   try {
-    const books = await searchBooks(query)
-    if (!books.length) {
-      resultsEl.innerHTML = noResultsHTML(query)
-      return
-    }
+    books = await searchBooks(query)
+  } catch (err) {
+    console.error('Books API error:', err)
+    resultsEl.innerHTML = errorHTML()
+    return
+  }
 
-    // Check which books are already on a shelf
-    const withShelf = await Promise.all(
-      books.map(async b => {
+  if (!books.length) {
+    resultsEl.innerHTML = noResultsHTML(query)
+    return
+  }
+
+  // Check which books are already on a shelf (non-fatal if Firestore fails)
+  const withShelf = await Promise.all(
+    books.map(async b => {
+      try {
         const saved = await getBook(b.googleBooksId)
         return { ...b, existingShelf: saved?.shelf || null }
-      })
-    )
-
-    resultsEl.innerHTML = withShelf.map(b => resultRowHTML(b)).join('')
-
-    resultsEl.querySelectorAll('.search-result').forEach((row, i) => {
-      row.addEventListener('click', () => {
-        openBookDetail(
-          withShelf[i],
-          withShelf[i].existingShelf,
-          () => {
-            // Re-run search to refresh shelf badges
-            resultsEl.innerHTML = loadingHTML()
-            setTimeout(() => doSearch(query, resultsEl), 300)
-          }
-        )
-      })
+      } catch {
+        return { ...b, existingShelf: null }
+      }
     })
-  } catch (err) {
-    console.error(err)
-    resultsEl.innerHTML = errorHTML()
-  }
+  )
+
+  resultsEl.innerHTML = withShelf.map(b => resultRowHTML(b)).join('')
+
+  resultsEl.querySelectorAll('.search-result').forEach((row, i) => {
+    row.addEventListener('click', () => {
+      openBookDetail(
+        withShelf[i],
+        withShelf[i].existingShelf,
+        () => {
+          resultsEl.innerHTML = loadingHTML()
+          setTimeout(() => doSearch(query, resultsEl), 300)
+        }
+      )
+    })
+  })
 }
 
 function resultRowHTML(book) {
