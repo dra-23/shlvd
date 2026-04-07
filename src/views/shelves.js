@@ -38,7 +38,7 @@ export function renderShelves(container) {
         </div>
         <div class="search-bar shelves-search-bar">
           <span class="material-symbols-rounded">search</span>
-          <input class="search-input" id="shelf-search-input" type="search"
+          <input class="search-input" id="shelf-search-input" type="text"
             placeholder="Search your library…" autocomplete="off" />
           <button class="icon-btn shelf-search-clear" id="shelf-search-clear" style="display:none;">
             <span class="material-symbols-rounded">close</span>
@@ -54,8 +54,6 @@ export function renderShelves(container) {
             ${t.label}
           </button>
         `).join('')}
-      </div>
-      <div class="shelf-tab-indicator-track">
         <div class="shelf-tab-indicator" id="shelf-tab-indicator"></div>
       </div>
 
