@@ -1,5 +1,5 @@
 import './style.css'
-import { auth, onAuthStateChanged, handleRedirectResult } from './firebase.js'
+import { auth, onAuthStateChanged } from './firebase.js'
 import { renderAuth } from './views/auth.js'
 import { renderShelves, destroyShelves } from './views/shelves.js'
 import { renderSearch, destroySearch } from './views/search.js'
@@ -106,27 +106,14 @@ function mountView(tab, el) {
 
 const app = document.getElementById('app')
 
-// Show a spinner while Firebase processes the redirect result from Google
-app.innerHTML = `
-  <div style="height:100dvh;display:flex;align-items:center;justify-content:center;">
-    <div style="width:48px;height:48px;border:4px solid var(--md-outline-variant);border-top-color:var(--md-primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-  </div>
-  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-`
-
-// Process any pending Google redirect before listening for auth state
-handleRedirectResult()
-  .catch(err => console.error('Redirect result error:', err))
-  .finally(() => {
-    onAuthStateChanged(auth, user => {
-      currentUser = user
-      if (user) {
-        renderShell()
-      } else {
-        renderSignIn()
-      }
-    })
-  })
+onAuthStateChanged(auth, user => {
+  currentUser = user
+  if (user) {
+    renderShell()
+  } else {
+    renderSignIn()
+  }
+})
 
 function renderShell() {
   app.innerHTML = shellHTML()
