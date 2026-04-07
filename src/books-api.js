@@ -1,4 +1,5 @@
 const BASE = 'https://www.googleapis.com/books/v1/volumes'
+const API_KEY = import.meta.env.VITE_BOOKS_API_KEY || ''
 
 /**
  * Search Google Books API.
@@ -6,7 +7,8 @@ const BASE = 'https://www.googleapis.com/books/v1/volumes'
  */
 export const searchBooks = async (query) => {
   if (!query.trim()) return []
-  const url = `${BASE}?q=${encodeURIComponent(query)}&maxResults=20&printType=books`
+  const key = API_KEY ? `&key=${API_KEY}` : ''
+  const url = `${BASE}?q=${encodeURIComponent(query)}&maxResults=20&printType=books${key}`
   const res = await fetch(url)
   if (!res.ok) {
     const err = new Error('Books API error')
