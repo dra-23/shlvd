@@ -27,13 +27,30 @@ let latestReadBooks = []
 // Pagination
 const MONTHS_PER_PAGE = 3
 let visibleMonths = MONTHS_PER_PAGE
+// All shelf books for local search
+const allShelfBooks = { reading: [], want: [], read: [] }
+const SHELF_BADGE = { reading: 'Reading', want: 'Want to Read', read: 'Read' }
 
 export function renderShelves(container) {
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;min-height:100%;">
-      <div class="top-bar">
+      <div class="top-bar" id="shelves-top-bar">
         <span class="top-bar-title">shlvd</span>
+        <button class="icon-btn" id="shelf-search-open">
+          <span class="material-symbols-rounded">search</span>
+        </button>
       </div>
+      <div id="shelf-search-bar" style="display:none;">
+        <div class="search-bar" style="margin:8px 16px;">
+          <span class="material-symbols-rounded">search</span>
+          <input class="search-input" id="shelf-search-input" type="search"
+            placeholder="Search your library…" autocomplete="off" />
+          <button class="icon-btn" id="shelf-search-close">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+      </div>
+      <div id="shelf-search-results" style="display:none;flex:1;overflow-y:auto;"></div>
       <div id="shelves-content" style="flex:1;padding-bottom:16px;">
         ${SHELVES.map(s => `
           <div class="shelf-section" id="shelf-${s.id}">
@@ -57,6 +74,69 @@ export function renderShelves(container) {
     </div>
   `
 
+  // ── Shelf search ─────────────────────────────────────
+  const openBtn    = container.querySelector('#shelf-search-open')
+  const closeBtn   = container.querySelector('#shelf-search-close')
+  const searchBar  = container.querySelector('#shelf-search-bar')
+  const searchInput = container.querySelector('#shelf-search-input')
+  const resultsEl  = container.querySelector('#shelf-search-results')
+  const contentEl  = container.querySelector('#shelves-content')
+
+  openBtn.addEventListener('click', () => {
+    searchBar.style.display = 'block'
+    resultsEl.style.display = 'block'
+    contentEl.style.display = 'none'
+    openBtn.style.display = 'none'
+    setTimeout(() => searchInput.focus(), 50)
+  })
+
+  const closeSearch = () => {
+    searchBar.style.display = 'none'
+    resultsEl.style.display = 'none'
+    contentEl.style.display = 'block'
+    openBtn.style.display = 'flex'
+    searchInput.value = ''
+    resultsEl.innerHTML = ''
+  }
+
+  closeBtn.addEventListener('click', closeSearch)
+
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase()
+    if (!q) { resultsEl.innerHTML = ''; return }
+    const all = [...allShelfBooks.reading, ...allShelfBooks.want, ...allShelfBooks.read]
+    const hits = all.filter(b =>
+      b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
+    )
+    if (!hits.length) {
+      resultsEl.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded">search_off</span><div class="empty-state-title">No matches</div></div>`
+      return
+    }
+    resultsEl.innerHTML = hits.map(b => `
+      <div class="search-result shelf-search-result" data-id="${b.id}" data-shelf="${b.shelf}">
+        <div class="search-result-cover">
+          ${b.thumbnail ? `<img src="${b.thumbnail}" alt="${b.title}" loading="lazy" />` : ''}
+        </div>
+        <div class="search-result-info">
+          <div class="search-result-title">${b.title}</div>
+          <div class="search-result-author">${b.author}</div>
+        </div>
+        <span class="search-result-badge">${SHELF_BADGE[b.shelf] || b.shelf}</span>
+      </div>
+    `).join('')
+
+    resultsEl.querySelectorAll('.shelf-search-result').forEach((row, i) => {
+      row.addEventListener('click', async () => {
+        try {
+          const bookData = await getBook(hits[i].id)
+          openBookDetail({ ...hits[i], ...bookData }, hits[i].shelf, null)
+        } catch {
+          openBookDetail(hits[i], hits[i].shelf, null)
+        }
+      })
+    })
+  })
+
   // Expand/collapse button for Read
   container.querySelector('#expand-read-btn')?.addEventListener('click', () => {
     expandedState.read = !expandedState.read
@@ -66,6 +146,7 @@ export function renderShelves(container) {
   const unsubscribers = []
   SHELVES.forEach(shelf => {
     const unsub = watchShelf(shelf.id, books => {
+      allShelfBooks[shelf.id] = books
       if (shelf.id === 'read') {
         latestReadBooks = books
         renderReadSection(container, books)
