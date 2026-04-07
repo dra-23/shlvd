@@ -47,9 +47,10 @@ export function renderSearch(container) {
       results.innerHTML = emptyPrompt()
       return
     }
+    if (q.length < 3) return  // wait for at least 3 characters
 
     results.innerHTML = loadingHTML()
-    debounceTimer = setTimeout(() => doSearch(q, results), 400)
+    debounceTimer = setTimeout(() => doSearch(q, results), 900)
   })
 
   clearBtn.addEventListener('click', () => {
@@ -71,7 +72,7 @@ async function doSearch(query, resultsEl) {
     books = await searchBooks(query)
   } catch (err) {
     console.error('Books API error:', err)
-    resultsEl.innerHTML = errorHTML()
+    resultsEl.innerHTML = err.status === 429 ? rateLimitHTML() : errorHTML()
     return
   }
 
@@ -168,6 +169,16 @@ function errorHTML() {
       <span class="material-symbols-rounded">wifi_off</span>
       <div class="empty-state-title">Couldn't reach Books API</div>
       <div class="empty-state-body">Check your connection and try again.</div>
+    </div>
+  `
+}
+
+function rateLimitHTML() {
+  return `
+    <div class="empty-state">
+      <span class="material-symbols-rounded">hourglass_empty</span>
+      <div class="empty-state-title">Too many searches</div>
+      <div class="empty-state-body">Google Books API rate limit hit. Wait a few seconds and try again.</div>
     </div>
   `
 }

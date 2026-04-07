@@ -8,7 +8,11 @@ export const searchBooks = async (query) => {
   if (!query.trim()) return []
   const url = `${BASE}?q=${encodeURIComponent(query)}&maxResults=20&printType=books`
   const res = await fetch(url)
-  if (!res.ok) throw new Error('Books API error')
+  if (!res.ok) {
+    const err = new Error('Books API error')
+    err.status = res.status
+    throw err
+  }
   const data = await res.json()
   if (!data.items) return []
   return data.items.map(normalizeBook)
