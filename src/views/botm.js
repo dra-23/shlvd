@@ -57,7 +57,10 @@ function botmCardHTML(book) {
   const month = formatMonth(book.dateCompleted)
 
   const coverHTML = book.thumbnail
-    ? `<img src="${book.thumbnail}" alt="${book.title}" loading="lazy" />`
+    ? `<img src="${book.thumbnail}" alt="${book.title}" loading="lazy"
+           data-book-id="${book.id}"
+           data-title="${book.title.replace(/"/g, '&quot;')}"
+           data-author="${(book.author || '').replace(/"/g, '&quot;')}" />`
     : `<div class="book-cover-placeholder" style="width:100%;height:100%;">
          <span class="material-symbols-rounded" style="font-size:28px">menu_book</span>
        </div>`

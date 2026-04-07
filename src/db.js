@@ -84,6 +84,7 @@ export const updateBook = async (id, updates) => {
   if ('progress'      in updates) dbUpdates.progress      = updates.progress
   if ('isBOTM'        in updates) dbUpdates.isBOTM        = updates.isBOTM
   if ('genre'         in updates) dbUpdates.genre         = updates.genre
+  if ('thumbnail'     in updates) dbUpdates.cover         = updates.thumbnail
   if ('dateCompleted' in updates) dbUpdates.dateCompleted = updates.dateCompleted
   await updateDoc(ref, dbUpdates)
 }

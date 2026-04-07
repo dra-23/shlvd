@@ -309,7 +309,10 @@ function attachCardListeners(container, books, shelfId) {
 
 function bookCardHTML(book, shelf) {
   const coverHTML = book.thumbnail
-    ? `<img src="${book.thumbnail}" alt="${book.title}" loading="lazy" />`
+    ? `<img src="${book.thumbnail}" alt="${book.title}" loading="lazy"
+           data-book-id="${book.id}"
+           data-title="${book.title.replace(/"/g, '&quot;')}"
+           data-author="${(book.author || '').replace(/"/g, '&quot;')}" />`
     : `<div class="book-cover-placeholder">
          <span class="material-symbols-rounded">menu_book</span>
          <div class="placeholder-title">${book.title}</div>
