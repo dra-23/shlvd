@@ -55,6 +55,9 @@
   --md-inverse-on-surface: #eff3ea;
   --md-inverse-primary:    #7a9468;
 
+  --custom-shelf-card: #bdaa8e; 
+  --md-on-custom-shelf-card: #2c2720;
+
   /* Shape */
   --md-shape-xs:    4px;
   --md-shape-sm:    8px;
@@ -267,11 +270,13 @@ html, body {
   cursor: pointer;
   border-radius: var(--md-shape-lg);
   overflow: visible;
-  background: transparent;
+  background: var(--custom-shelf-card);
   -webkit-tap-highlight-color: transparent;
+  box-shadow: var(--md-elevation-1);
 }
 
-.book-card:active .book-cover { transform: scale(0.96); }
+.book-card:active .book-cover { transform: scale(0.96); background: var(--md-surface-container-highest);
+}
 
 .book-cover {
   width: 120px;
