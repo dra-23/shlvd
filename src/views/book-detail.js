@@ -182,7 +182,9 @@ function buildSheetHTML(book, existingShelf) {
       <div class="sheet-meta">
         <div class="sheet-title">${book.title}</div>
         <div class="sheet-author">${book.author}</div>
-        ${book.dateReleased ? `<div class="body-small mt-4" style="color:var(--md-on-surface-variant)">Published ${book.dateReleased}</div>` : ''}
+        <input type="text" class="genre-meta-input" id="genre-input"
+          value="${book.genre || ''}" placeholder="Add genre…" />
+        ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant)">Published ${book.dateReleased}</div>` : ''}
       </div>
       <button class="icon-btn" id="close-btn">
         <span class="material-symbols-rounded">close</span>
@@ -190,13 +192,6 @@ function buildSheetHTML(book, existingShelf) {
     </div>
 
     <div class="sheet-body">
-
-      <!-- Genre -->
-      <div>
-        <div class="sheet-section-label">Genre</div>
-        <input type="text" class="genre-input-field" id="genre-input"
-          value="${book.genre || ''}" placeholder="e.g. Fantasy, Literary Fiction…" />
-      </div>
 
       ${hasDescription ? `
       <!-- Description -->

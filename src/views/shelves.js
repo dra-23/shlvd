@@ -33,9 +33,7 @@ export function renderShelves(container) {
   container.innerHTML = `
     <div class="shelves-root">
       <div class="shelves-top">
-        <div class="shelves-title-row">
-          <span class="top-bar-title">shlvd</span>
-        </div>
+        <img src="/logo-512.png" class="shelves-logo" alt="shlvd" />
         <div class="search-bar shelves-search-bar">
           <span class="material-symbols-rounded">search</span>
           <input class="search-input" id="shelf-search-input" type="text"
@@ -59,29 +57,31 @@ export function renderShelves(container) {
 
       <!-- Tab panels -->
       <div id="shelves-content">
-        ${TABS.map(t => `
-          <div class="shelf-panel ${t.id === activeTab ? 'active' : ''}" id="panel-${t.id}">
-            <div class="book-grid panel-grid" id="grid-${t.id}">
-              ${skeletonCards(6)}
+        <div class="shelf-panels-wrapper" id="shelf-panels-wrapper">
+          ${TABS.map(t => `
+            <div class="shelf-panel" id="panel-${t.id}">
+              <div class="book-grid panel-grid" id="grid-${t.id}">
+                ${skeletonCards(6)}
+              </div>
             </div>
-          </div>
-        `).join('')}
+          `).join('')}
+        </div>
       </div>
     </div>
   `
 
   // ── Tab switching ─────────────────────────────────────
-  const tabBar   = container.querySelector('#shelf-tab-bar')
+  const tabBar = container.querySelector('#shelf-tab-bar')
   const indicator = container.querySelector('#shelf-tab-indicator')
+  const wrapper = container.querySelector('#shelf-panels-wrapper')
 
   function setActiveTab(id) {
     activeTab = id
+    const idx = TABS.findIndex(t => t.id === id)
     tabBar.querySelectorAll('.shelf-tab').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === id)
     })
-    container.querySelectorAll('.shelf-panel').forEach(p => {
-      p.classList.toggle('active', p.id === `panel-${id}`)
-    })
+    wrapper.style.transform = `translateX(${-idx * 100}%)`
     positionIndicator()
   }
 
@@ -95,8 +95,14 @@ export function renderShelves(container) {
     btn.addEventListener('click', () => setActiveTab(btn.dataset.tab))
   })
 
-  // Position indicator after layout
-  requestAnimationFrame(positionIndicator)
+  // Set initial wrapper position (no transition on first render)
+  const initialIdx = TABS.findIndex(t => t.id === activeTab)
+  wrapper.style.transition = 'none'
+  wrapper.style.transform = `translateX(${-initialIdx * 100}%)`
+  requestAnimationFrame(() => {
+    wrapper.style.transition = ''
+    positionIndicator()
+  })
 
   // ── Swipe between tabs ────────────────────────────────
   const swipeEl = container.querySelector('#shelves-content')
