@@ -8,8 +8,8 @@ export function renderSearch(container) {
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
       
-      <div class="shelves-top" style="display:flex; align-items:center; gap:12px; padding: 8px 16px;">
-        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" style="width:32px; height:32px; border-radius:8px;" />
+      <div class="shelves-top">
+        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
         
         <div class="search-bar shelves-search-bar" style="flex:1;">
           <span class="material-symbols-rounded">search</span>
