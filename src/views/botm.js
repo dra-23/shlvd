@@ -27,9 +27,9 @@ export function renderBotm(container) {
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
       
-      <div class="shelves-top" style="display:flex; align-items:center; gap:12px;">
+      <div class="shelves-top">
         <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
-        <span class="top-bar-title">Book of the Month</span>
+        <span class="top-bar-title" style="margin-left:12px;">Book of the Month</span>
       </div>
 
       <div id="botm-content" style="padding:0 0 16px;flex:1;overflow-y:auto;">
