@@ -45,7 +45,7 @@ export function renderShelves(container) {
 
       <div id="shelf-search-results" style="display:none;flex:1;overflow-y:auto;"></div>
 
-      <div id="shelves-content" style="flex:1;overflow-y:auto;padding:8px 0 24px;">
+      <div id="shelves-content" style="flex:1;overflow-y:auto;padding:0px 0 24px;">
 
         <!-- Reading -->
         <div class="shelf-section">

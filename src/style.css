@@ -1395,10 +1395,12 @@ html, body {
   font-size: 1rem;
   font-weight: 800;
   color: var(--md-on-surface);
-  padding: 10px 16px 6px;
+  /* Combined: 12px top, 16px right, 6px bottom, 16px left */
+  padding: 12px 16px 6px; 
   position: sticky;
   top: 0;
   background: var(--md-background);
+  margin-top: 0;
   z-index: 10;
 }
 
