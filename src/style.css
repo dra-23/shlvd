@@ -469,7 +469,7 @@ html, body {
   box-shadow: var(--md-elevation-1);
   margin: 0 16px 12px;
   padding: 16px 0 12px;
-  overflow: hidden;
+  clip-path: inset(0 round var(--md-shape-xl));
 }
 
 .shelf-header {
@@ -1394,7 +1394,7 @@ html, body {
   border-bottom: 2px solid var(--md-primary-container);
   position: sticky;
   top: 0;
-  background: var(--md-background);
+  background: var(--md-surface-container-lowest);
   z-index: 10;
 }
 
