@@ -13,7 +13,7 @@ function starHTML(rating) {
   if (!rating) return ''
   return `<div class="botm-stars">${[1,2,3,4,5].map(n =>
     `<span class="material-symbols-rounded botm-star ${n <= rating ? 'filled' : ''}"
-      style="font-size:16px;${n <= rating ? "font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;color:#F5A623;" : 'color:var(--md-outline-variant);'}">star</span>`
+      style="font-size:16px;${n <= rating ? "font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;color:var(--md-tertiary);" : 'color:var(--md-outline-variant);'}">star</span>`
   ).join('')}</div>`
 }
 

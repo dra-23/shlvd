@@ -1315,8 +1315,8 @@ html, body {
   align-self: flex-start;
   padding: 3px 10px;
   border-radius: var(--md-shape-full);
-  background: #F5A623;
-  color: #fff;
+  background: var(--md-tertiary);
+  color: var(--md-on-tertiary);
   font-size: 0.625rem;
   font-weight: 800;
   letter-spacing: 0.5px;
