@@ -270,7 +270,7 @@ html, body {
   cursor: pointer;
   border-radius: var(--md-shape-lg);
   overflow: visible;
-  background: transparent;
+  background: var(--md-surface-container-low);
   -webkit-tap-highlight-color: transparent;
   box-shadow: var(--md-elevation-1);
 }
