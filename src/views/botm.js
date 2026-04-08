@@ -11,9 +11,15 @@ function formatMonth(date) {
 
 function starHTML(rating) {
   if (!rating) return ''
+  // Define your gold color here for easy updates
+  const goldColor = '#FFB800'; 
+  const outlineColor = 'var(--md-outline-variant)';
+
   return `<div class="botm-stars">${[1,2,3,4,5].map(n =>
-    `<span class="material-symbols-rounded botm-star ${n <= rating ? 'filled' : ''}"
-      style="font-size:16px;${n <= rating ? "font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;color:var(--md-tertiary);" : 'color:var(--md-outline-variant);'}">star</span>`
+    `<span class="material-symbols-rounded botm-star"
+      style="font-size:16px; ${n <= rating 
+        ? `font-variation-settings:'FILL' 1; color:${goldColor};` 
+        : `color:${outlineColor};`}">star</span>`
   ).join('')}</div>`
 }
 
