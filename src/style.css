@@ -1330,7 +1330,7 @@ html, body {
   padding: 3px 10px;
   border-radius: var(--md-shape-full);
   background: var(--md-tertiary);
-  color: var(--md-on-tertiary);
+  color: #ffffff;
   font-size: 0.625rem;
   font-weight: 800;
   letter-spacing: 0.5px;
@@ -1369,6 +1369,13 @@ html, body {
   display: flex;
   gap: 1px;
   margin-top: 2px;
+  color: #FFB800; 
+}
+
+/* This specifically tells the Material Symbols inside the stars to be solid */
+.botm-stars .material-symbols-rounded {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-size: 14px; /* Adjust if they look too big/small */
 }
 
 .botm-genre {
