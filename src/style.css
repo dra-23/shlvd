@@ -87,7 +87,7 @@
 
 html, body {
   height: 100%;
-  background: var(--md-background);
+  background-color: var(--md-background) !important;
   color: var(--md-on-background);
   font-family: 'Nunito', system-ui, sans-serif;
   font-size: 16px;
@@ -158,9 +158,15 @@ html, body {
 .bottom-nav {
   display: flex;
   background: var(--md-background);
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  /* Keep the padding to protect icons from the gesture line */
+  padding-bottom: env(safe-area-inset-bottom, 12px);
   border-top: 1px solid var(--md-outline-variant);
   z-index: 10;
+
+  /* THE FIX: This projects your sage color 100px downwards. 
+     Even if Chrome forces a gap, it will be filled with this color 
+     instead of white. */
+  box-shadow: 0 100px 0 0 var(--md-background);
 }
 
 .nav-item {
