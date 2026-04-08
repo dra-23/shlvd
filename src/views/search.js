@@ -6,30 +6,32 @@ const SHELF_BADGE = { want: 'Want', reading: 'Reading', read: 'Read' }
 
 export function renderSearch(container) {
   container.innerHTML = `
-    <div style="display:flex;flex-direction:column;min-height:100%;">
-      <div class="top-bar" style="display:flex; align-items:center; gap:12px;">
-        <img src="/icons/logo2-512.png" alt="Logo" style="width:32px; height:32px; border-radius:8px; margin-left:16px;">
-        <span class="top-bar-title">Search</span>
+    <div style="display:flex;flex-direction:column;height:100%;">
+      
+      <div class="shelves-top" style="display:flex; align-items:center; gap:12px; padding: 8px 16px;">
+        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" style="width:32px; height:32px; border-radius:8px;" />
+        
+        <div class="search-bar shelves-search-bar" style="flex:1;">
+          <span class="material-symbols-rounded">search</span>
+          <input 
+            class="search-input" 
+            id="search-input" 
+            type="search"
+            placeholder="Title, author, ISBN…" 
+            autocomplete="off" 
+            autocorrect="off"
+            spellcheck="false"
+            enterkeyhint="search"
+          />
+          <button class="icon-btn" id="clear-btn" style="display:none">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
       </div>
 
-      <div class="search-bar">
-        <span class="material-symbols-rounded">search</span>
-        <input
-          class="search-input"
-          id="search-input"
-          type="search"
-          placeholder="Title, author, ISBN…"
-          autocomplete="off"
-          autocorrect="off"
-          spellcheck="false"
-          enterkeyhint="search"
-        />
-        <button class="icon-btn" id="clear-btn" style="display:none">
-          <span class="material-symbols-rounded">close</span>
-        </button>
-      </div>
+      <div id="search-results" style="flex:1; overflow-y:auto; padding-top: 8px;">
+        </div>
 
-      <div id="search-results" style="flex:1;overflow-y:auto;"></div>
     </div>
   `
 
