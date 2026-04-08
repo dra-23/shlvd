@@ -2,10 +2,10 @@ import { watchShelf, getBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
 import { navigateTo } from '../main.js'
 
-const TABS = [
-  { id: 'want',    label: 'Queued',  icon: 'bookmark'           },
-  { id: 'reading', label: 'Reading', icon: 'chrome_reader_mode' },
-  { id: 'read',    label: 'Read',    icon: 'done_all'           },
+const SHELVES = [
+  { id: 'reading', label: 'Reading' },
+  { id: 'want',    label: 'Queued'  },
+  { id: 'read',    label: 'Read'    },
 ]
 
 // Snackbar helper — exported for use by other views
@@ -20,154 +20,111 @@ export function showSnackbar(msg) {
   snackbarTimeout = setTimeout(() => el.remove(), 3000)
 }
 
-// Module-level state
-let activeTab = 'reading'
 const allShelfBooks = { reading: [], want: [], read: [] }
 const SHELF_BADGE   = { reading: 'Reading', want: 'Queued', read: 'Read' }
-
-// Read-tab pagination
+let expandedRead    = false
+let latestReadBooks = []
 const MONTHS_PER_PAGE = 6
-let visibleMonths = MONTHS_PER_PAGE
+let visibleMonths     = MONTHS_PER_PAGE
 
 export function renderShelves(container) {
   container.innerHTML = `
     <div class="shelves-root">
+
       <div class="shelves-top">
         <img src="/logo-512.png" class="shelves-logo" alt="shlvd" />
         <div class="search-bar shelves-search-bar">
           <span class="material-symbols-rounded">search</span>
           <input class="search-input" id="shelf-search-input" type="text"
             placeholder="Search your library…" autocomplete="off" />
-          <button class="icon-btn shelf-search-clear" id="shelf-search-clear" style="display:none;">
+          <button class="icon-btn" id="shelf-search-clear" style="display:none;">
             <span class="material-symbols-rounded">close</span>
           </button>
         </div>
       </div>
+
       <div id="shelf-search-results" style="display:none;flex:1;overflow-y:auto;"></div>
 
-      <!-- Tab bar -->
-      <div class="shelf-tab-bar" id="shelf-tab-bar">
-        ${TABS.map(t => `
-          <button class="shelf-tab ${t.id === activeTab ? 'active' : ''}" data-tab="${t.id}">
-            ${t.label}
-          </button>
-        `).join('')}
-        <div class="shelf-tab-indicator" id="shelf-tab-indicator"></div>
-      </div>
+      <div id="shelves-content" style="flex:1;overflow-y:auto;padding-bottom:16px;">
 
-      <!-- Tab panels -->
-      <div id="shelves-content">
-        <div class="shelf-panels-wrapper" id="shelf-panels-wrapper">
-          ${TABS.map(t => `
-            <div class="shelf-panel" id="panel-${t.id}">
-              <div class="book-grid panel-grid" id="grid-${t.id}">
-                ${skeletonCards(6)}
-              </div>
-            </div>
-          `).join('')}
+        <!-- Reading -->
+        <div class="shelf-section">
+          <div class="shelf-header">
+            <span class="shelf-title">Reading</span>
+            <span class="shelf-count" id="count-reading"></span>
+          </div>
+          <div class="shelf-scroll" id="scroll-reading">${skeletonCards(3)}</div>
         </div>
+        <div class="divider"></div>
+
+        <!-- Queued -->
+        <div class="shelf-section">
+          <div class="shelf-header">
+            <span class="shelf-title">Queued</span>
+            <span class="shelf-count" id="count-want"></span>
+          </div>
+          <div class="shelf-scroll" id="scroll-want">${skeletonCards(3)}</div>
+        </div>
+        <div class="divider"></div>
+
+        <!-- Read -->
+        <div class="shelf-section">
+          <div class="shelf-header">
+            <span class="shelf-title">Read</span>
+            <span class="shelf-count" id="count-read"></span>
+            <button class="btn btn-text expand-read-btn" id="expand-read-btn">
+              <span class="material-symbols-rounded" style="font-size:18px">expand_more</span>
+              View all
+            </button>
+          </div>
+          <div id="shelf-body-read">
+            <div class="shelf-scroll" id="scroll-read">${skeletonCards(3)}</div>
+          </div>
+        </div>
+
       </div>
     </div>
   `
 
-  // ── Tab switching ─────────────────────────────────────
-  const tabBar = container.querySelector('#shelf-tab-bar')
-  const indicator = container.querySelector('#shelf-tab-indicator')
-  const wrapper = container.querySelector('#shelf-panels-wrapper')
-
-  function setActiveTab(id) {
-    activeTab = id
-    const idx = TABS.findIndex(t => t.id === id)
-    tabBar.querySelectorAll('.shelf-tab').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === id)
-    })
-    wrapper.style.transform = `translateX(${-idx * 100}%)`
-    positionIndicator()
-  }
-
-  function positionIndicator() {
-    const activeBtn = tabBar.querySelector('.shelf-tab.active')
-    if (!activeBtn || !indicator) return
-    indicator.style.left = `${activeBtn.offsetLeft + activeBtn.offsetWidth / 2}px`
-  }
-
-  tabBar.querySelectorAll('.shelf-tab').forEach(btn => {
-    btn.addEventListener('click', () => setActiveTab(btn.dataset.tab))
-  })
-
-  // Set initial wrapper position (no transition on first render)
-  const initialIdx = TABS.findIndex(t => t.id === activeTab)
-  wrapper.style.transition = 'none'
-  wrapper.style.transform = `translateX(${-initialIdx * 100}%)`
-  requestAnimationFrame(() => {
-    wrapper.style.transition = ''
-    positionIndicator()
-  })
-
-  // ── Swipe between tabs ────────────────────────────────
-  const swipeEl = container.querySelector('#shelves-content')
-  let touchStartX = 0
-  let touchStartY = 0
-
-  swipeEl.addEventListener('touchstart', e => {
-    touchStartX = e.touches[0].clientX
-    touchStartY = e.touches[0].clientY
-  }, { passive: true })
-
-  swipeEl.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].clientX - touchStartX
-    const dy = e.changedTouches[0].clientY - touchStartY
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
-    const tabIds = TABS.map(t => t.id)
-    const cur = tabIds.indexOf(activeTab)
-    if (dx < 0 && cur < tabIds.length - 1) setActiveTab(tabIds[cur + 1])
-    if (dx > 0 && cur > 0) setActiveTab(tabIds[cur - 1])
-  }, { passive: true })
-
-  // ── Shelf search ──────────────────────────────────────
+  // ── Search ────────────────────────────────────────────
   const searchInput = container.querySelector('#shelf-search-input')
   const clearBtn    = container.querySelector('#shelf-search-clear')
   const resultsEl   = container.querySelector('#shelf-search-results')
   const contentEl   = container.querySelector('#shelves-content')
-  const tabBarEl    = container.querySelector('#shelf-tab-bar')
-  const indicatorEl = container.querySelector('.shelf-tab-indicator-track')
 
-  clearBtn.addEventListener('click', () => {
-    searchInput.value = ''
-    clearBtn.style.display = 'none'
+  const hideResults = () => {
     resultsEl.style.display = 'none'
     resultsEl.innerHTML = ''
     contentEl.style.display = 'block'
-    tabBarEl.style.display = 'flex'
-    indicatorEl.style.display = 'block'
-    searchInput.focus()
-  })
+    clearBtn.style.display = 'none'
+    searchInput.value = ''
+  }
+
+  clearBtn.addEventListener('click', () => { hideResults(); searchInput.focus() })
 
   searchInput.addEventListener('input', () => {
     const q = searchInput.value.trim().toLowerCase()
     clearBtn.style.display = q ? 'flex' : 'none'
-    if (!q) {
-      resultsEl.style.display = 'none'
-      resultsEl.innerHTML = ''
-      contentEl.style.display = 'block'
-      tabBarEl.style.display = 'flex'
-      indicatorEl.style.display = 'block'
-      return
-    }
+    if (!q) { hideResults(); return }
+
     resultsEl.style.display = 'block'
     contentEl.style.display = 'none'
-    tabBarEl.style.display = 'none'
-    indicatorEl.style.display = 'none'
+
     const all = [...allShelfBooks.reading, ...allShelfBooks.want, ...allShelfBooks.read]
     const hits = all.filter(b =>
       b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q)
     )
+
     if (!hits.length) {
-      resultsEl.innerHTML = `<div class="empty-state"><span class="material-symbols-rounded">search_off</span><div class="empty-state-title">No matches</div></div>`
+      resultsEl.innerHTML = `<div class="empty-state">
+        <span class="material-symbols-rounded">search_off</span>
+        <div class="empty-state-title">No matches</div>
+      </div>`
       return
     }
+
     resultsEl.innerHTML = hits.map(b => `
-      <div class="search-result shelf-search-result" data-id="${b.id}" data-shelf="${b.shelf}">
+      <div class="search-result shelf-search-result" data-id="${b.id}">
         <div class="search-result-cover">
           ${b.thumbnail ? `<img src="${b.thumbnail}" alt="${b.title}" loading="lazy" />` : ''}
         </div>
@@ -191,93 +148,110 @@ export function renderShelves(container) {
     })
   })
 
+  // ── Read expand/collapse ──────────────────────────────
+  container.querySelector('#expand-read-btn').addEventListener('click', () => {
+    expandedRead = !expandedRead
+    renderReadSection(container, latestReadBooks)
+  })
+
   // ── Watch shelves ─────────────────────────────────────
-  const unsubscribers = []
-  TABS.forEach(tab => {
-    const unsub = watchShelf(tab.id, books => {
-      allShelfBooks[tab.id] = books
-      if (tab.id === 'read') {
-        renderReadGrid(container, books)
+  const unsubscribers = SHELVES.map(shelf =>
+    watchShelf(shelf.id, books => {
+      allShelfBooks[shelf.id] = books
+      if (shelf.id === 'read') {
+        latestReadBooks = books
+        renderReadSection(container, books)
       } else {
-        renderGrid(container, tab.id, books)
+        renderShelfScroll(container, shelf.id, books)
       }
     })
-    unsubscribers.push(unsub)
-  })
+  )
 
   return () => unsubscribers.forEach(u => u())
 }
 
-// ── Render a standard shelf grid ─────────────────────────────────────────────
+// ── Horizontal scroll shelf (Reading / Queued) ────────────────────────────────
 
-function renderGrid(container, shelfId, books) {
-  const gridEl = container.querySelector(`#grid-${shelfId}`)
-  if (!gridEl) return
+function renderShelfScroll(container, shelfId, books) {
+  const scrollEl = container.querySelector(`#scroll-${shelfId}`)
+  const countEl  = container.querySelector(`#count-${shelfId}`)
+  if (!scrollEl) return
+
+  countEl.textContent = books.length || ''
 
   if (!books.length) {
-    gridEl.innerHTML = `
-      <div class="shelf-empty" style="width:100%;padding:32px 0;">
+    scrollEl.innerHTML = `
+      <div class="shelf-empty">
         No books here yet —
         <button class="btn btn-text" style="padding:0 4px;font-size:0.875rem;" data-goto="search">
           search to add one
         </button>
-      </div>
-    `
-    gridEl.querySelector('[data-goto]')?.addEventListener('click', () => navigateTo('search'))
+      </div>`
+    scrollEl.querySelector('[data-goto]')?.addEventListener('click', () => navigateTo('search'))
     return
   }
 
-  gridEl.innerHTML = books.map(book => bookCardHTML(book, shelfId)).join('')
-  attachCardListeners(gridEl, books, shelfId)
+  scrollEl.innerHTML = books.map(b => bookCardHTML(b, shelfId)).join('')
+  attachCardListeners(scrollEl, books, shelfId)
 }
 
-// ── Render the Read shelf (month-grouped, paginated) ──────────────────────────
+// ── Read shelf — collapsed (scroll) or expanded (month grid) ─────────────────
 
-function renderReadGrid(container, books) {
-  const panelEl = container.querySelector('#panel-read')
-  if (!panelEl) return
+function renderReadSection(container, books) {
+  const countEl  = container.querySelector('#count-read')
+  const expandBtn = container.querySelector('#expand-read-btn')
+  const bodyEl   = container.querySelector('#shelf-body-read')
+  if (!bodyEl) return
+
+  if (countEl) countEl.textContent = books.length || ''
+  if (expandBtn) {
+    expandBtn.innerHTML = expandedRead
+      ? `<span class="material-symbols-rounded" style="font-size:18px">expand_less</span> Collapse`
+      : `<span class="material-symbols-rounded" style="font-size:18px">expand_more</span> View all`
+  }
 
   if (!books.length) {
-    panelEl.innerHTML = `
-      <div class="shelf-empty" style="width:100%;padding:32px 16px;">
-        No books here yet —
-        <button class="btn btn-text" style="padding:0 4px;font-size:0.875rem;" data-goto="search">
-          search to add one
-        </button>
-      </div>
-    `
-    panelEl.querySelector('[data-goto]')?.addEventListener('click', () => navigateTo('search'))
+    bodyEl.innerHTML = `<div class="shelf-scroll"><div class="shelf-empty">
+      No books here yet —
+      <button class="btn btn-text" style="padding:0 4px;font-size:0.875rem;" data-goto="search">search to add one</button>
+    </div></div>`
+    bodyEl.querySelector('[data-goto]')?.addEventListener('click', () => navigateTo('search'))
     return
   }
 
-  visibleMonths = MONTHS_PER_PAGE
-  renderReadMonths(panelEl, books)
+  if (!expandedRead) {
+    bodyEl.innerHTML = `<div class="shelf-scroll" id="scroll-read">
+      ${books.map(b => bookCardHTML(b, 'read')).join('')}
+    </div>`
+    attachCardListeners(bodyEl.querySelector('#scroll-read'), books, 'read')
+  } else {
+    visibleMonths = MONTHS_PER_PAGE
+    renderReadMonths(bodyEl, books)
+  }
 }
 
-function renderReadMonths(panelEl, books) {
+function renderReadMonths(bodyEl, books) {
   const groups  = groupByMonth(books)
   const visible = groups.slice(0, visibleMonths)
   const hasMore = groups.length > visibleMonths
 
-  panelEl.innerHTML = `
-    ${visible.map(({ label, books: gb }) => `
-      <div class="month-group">
-        <div class="month-group-title">${label}</div>
-        <div class="book-grid">
-          ${gb.map(b => bookCardHTML(b, 'read')).join('')}
+  bodyEl.innerHTML = `
+    <div class="read-expanded">
+      ${visible.map(({ label, books: gb }) => `
+        <div class="month-group">
+          <div class="month-group-title">${label}</div>
+          <div class="book-grid">${gb.map(b => bookCardHTML(b, 'read')).join('')}</div>
         </div>
-      </div>
-    `).join('')}
-    ${hasMore ? `
-      <button class="btn btn-tonal load-more-btn" style="width:100%;height:48px;margin-top:8px;">
-        <span class="material-symbols-rounded">expand_more</span>
-        Load older months (${groups.length - visibleMonths} more)
-      </button>
-    ` : ''}
-  `
+      `).join('')}
+      ${hasMore ? `
+        <button class="btn btn-tonal load-more-btn" style="width:100%;height:48px;margin-top:8px;">
+          <span class="material-symbols-rounded">expand_more</span>
+          Load older months (${groups.length - visibleMonths} more)
+        </button>` : ''}
+    </div>`
 
   const allVisible = visible.flatMap(g => g.books)
-  panelEl.querySelectorAll('.book-card').forEach((card, i) => {
+  bodyEl.querySelectorAll('.book-card').forEach((card, i) => {
     card.addEventListener('click', async () => {
       try {
         const bookData = await getBook(allVisible[i].id)
@@ -288,29 +262,27 @@ function renderReadMonths(panelEl, books) {
     })
   })
 
-  panelEl.querySelector('.load-more-btn')?.addEventListener('click', () => {
+  bodyEl.querySelector('.load-more-btn')?.addEventListener('click', () => {
     visibleMonths += MONTHS_PER_PAGE
-    renderReadMonths(panelEl, books)
+    renderReadMonths(bodyEl, books)
   })
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function groupByMonth(books) {
   const map = new Map()
   books.forEach(book => {
     const d = book.dateCompleted
-    const key = d
-      ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      : 'Unknown'
+    const key = d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'
     if (!map.has(key)) map.set(key, [])
     map.get(key).push(book)
   })
   return Array.from(map.entries()).map(([label, books]) => ({ label, books }))
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function attachCardListeners(gridEl, books, shelfId) {
-  gridEl.querySelectorAll('.book-card').forEach((card, i) => {
+function attachCardListeners(el, books, shelfId) {
+  el.querySelectorAll('.book-card').forEach((card, i) => {
     card.addEventListener('click', async () => {
       try {
         const bookData = await getBook(books[i].id)
@@ -345,17 +317,13 @@ function bookCardHTML(book, shelf) {
 
   return `
     <div class="book-card">
-      <div class="book-cover">
-        ${coverHTML}
-        ${botmBadge}
-      </div>
+      <div class="book-cover">${coverHTML}${botmBadge}</div>
       <div class="book-card-info">
         <div class="book-card-title">${book.title}</div>
         <div class="book-card-author">${book.author}</div>
         ${progressHTML}
       </div>
-    </div>
-  `
+    </div>`
 }
 
 function skeletonCards(n) {
@@ -366,8 +334,7 @@ function skeletonCards(n) {
         <div class="skeleton" style="height:12px;border-radius:6px;width:90%"></div>
         <div class="skeleton" style="height:10px;border-radius:6px;width:60%"></div>
       </div>
-    </div>
-  `).join('')
+    </div>`).join('')
 }
 
 export function destroyShelves() {}
