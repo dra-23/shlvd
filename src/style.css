@@ -377,9 +377,9 @@ html, body {
 }
 
 .shelves-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   flex-shrink: 0;
   object-fit: contain;
 }
@@ -1276,10 +1276,15 @@ html, body {
 .book-cover { position: relative; }
 
 /* ── BotM Gallery ────────────────────────────────────── */
+.botm-year-header + .botm-list {
+  margin-top: 0;
+}
+
 .botm-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-bottom: 8px;
 }
 
 .botm-card {
@@ -1390,7 +1395,7 @@ html, body {
   font-size: 1rem;
   font-weight: 800;
   color: var(--md-on-surface);
-  padding: 16px 16px 8px;
+  padding: 10px 16px 6px;
   position: sticky;
   top: 0;
   background: var(--md-background);
@@ -1402,7 +1407,7 @@ html, body {
   font-size: 1.125rem;
   font-weight: 800;
   color: var(--md-on-surface);
-  padding: 16px 0 8px;
+  padding: 10px 0 6px;
   position: sticky;
   top: 0;
   background: var(--md-background);
