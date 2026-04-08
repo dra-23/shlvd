@@ -17,7 +17,7 @@ function starHTML(rating) {
 
   return `<div class="botm-stars">${[1,2,3,4,5].map(n =>
     `<span class="material-symbols-rounded botm-star"
-      style="font-size:16px; ${n <= rating 
+      style="font-size:18px; ${n <= rating 
         ? `font-variation-settings:'FILL' 1; color:${goldColor};` 
         : `color:${outlineColor};`}">star</span>`
   ).join('')}</div>`
