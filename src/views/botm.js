@@ -19,11 +19,11 @@ function starHTML(rating) {
 
 export function renderBotm(container) {
   container.innerHTML = `
-    <div style="display:flex;flex-direction:column;min-height:100%;">
+    <div style="display:flex;flex-direction:column;height:100%;">
       <div class="top-bar">
         <span class="top-bar-title">Book of the Month</span>
       </div>
-      <div id="botm-content" style="padding:16px 16px 24px;">
+      <div id="botm-content" style="padding:0 16px 24px;flex:1;overflow-y:auto;">
         ${skeletonList()}
       </div>
     </div>
@@ -43,7 +43,11 @@ export function renderBotm(container) {
       return
     }
 
-    content.innerHTML = `<div class="botm-list">${books.map(botmCardHTML).join('')}</div>`
+    const groups = groupByYear(books)
+    content.innerHTML = groups.map(({ year, books: yb }) => `
+      <div class="botm-year-header">${year}</div>
+      <div class="botm-list">${yb.map(botmCardHTML).join('')}</div>
+    `).join('')
 
     content.querySelectorAll('.botm-card').forEach((card, i) => {
       card.addEventListener('click', () => openBookDetail(books[i], books[i].shelf, null))
@@ -51,6 +55,19 @@ export function renderBotm(container) {
   })
 
   return unsub
+}
+
+function groupByYear(books) {
+  const map = new Map()
+  books.forEach(book => {
+    const d = book.dateCompleted
+    const year = d ? (d instanceof Date ? d : new Date(d)).getFullYear().toString() : 'Unknown'
+    if (!map.has(year)) map.set(year, [])
+    map.get(year).push(book)
+  })
+  return Array.from(map.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([year, books]) => ({ year, books }))
 }
 
 function botmCardHTML(book) {

@@ -1385,6 +1385,30 @@ html, body {
   margin-bottom: 24px;
 }
 
+/* Month label (sticky) — rendered outside shelf cards in expanded Read */
+.month-sticky-label {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--md-on-surface);
+  padding: 16px 16px 8px;
+  position: sticky;
+  top: 0;
+  background: var(--md-background);
+  z-index: 10;
+}
+
+/* BotM year label (sticky) */
+.botm-year-header {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: var(--md-on-surface);
+  padding: 16px 0 8px;
+  position: sticky;
+  top: 0;
+  background: var(--md-background);
+  z-index: 5;
+}
+
 .month-group-title {
   font-size: 1rem;
   font-weight: 800;

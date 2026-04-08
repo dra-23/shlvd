@@ -1,4 +1,4 @@
-const CACHE = 'shlvd-v2'
+const CACHE = 'shlvd-v3'
 
 self.addEventListener('install', () => self.skipWaiting())
 

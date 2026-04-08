@@ -66,7 +66,7 @@ export function renderShelves(container) {
         </div>
 
         <!-- Read -->
-        <div class="shelf-section">
+        <div class="shelf-section" id="shelf-read-section">
           <div class="shelf-header">
             <span class="shelf-title">Read</span>
             <span class="shelf-count" id="count-read"></span>
@@ -79,6 +79,9 @@ export function renderShelves(container) {
             <div class="shelf-scroll" id="scroll-read">${skeletonCards(3)}</div>
           </div>
         </div>
+
+        <!-- Expanded read months render here, outside the card -->
+        <div id="shelf-read-expanded"></div>
 
       </div>
     </div>
@@ -196,10 +199,11 @@ function renderShelfScroll(container, shelfId, books) {
 // ── Read shelf — collapsed (scroll) or expanded (month grid) ─────────────────
 
 function renderReadSection(container, books) {
-  const countEl  = container.querySelector('#count-read')
-  const expandBtn = container.querySelector('#expand-read-btn')
-  const bodyEl   = container.querySelector('#shelf-body-read')
-  if (!bodyEl) return
+  const countEl    = container.querySelector('#count-read')
+  const expandBtn  = container.querySelector('#expand-read-btn')
+  const bodyEl     = container.querySelector('#shelf-body-read')
+  const expandedEl = container.querySelector('#shelf-read-expanded')
+  if (!bodyEl || !expandedEl) return
 
   if (countEl) countEl.textContent = books.length || ''
   if (expandBtn) {
@@ -214,42 +218,49 @@ function renderReadSection(container, books) {
       <button class="btn btn-text" style="padding:0 4px;font-size:0.875rem;" data-goto="search">search to add one</button>
     </div></div>`
     bodyEl.querySelector('[data-goto]')?.addEventListener('click', () => navigateTo('search'))
+    expandedEl.innerHTML = ''
     return
   }
 
   if (!expandedRead) {
+    bodyEl.style.display = 'block'
     bodyEl.innerHTML = `<div class="shelf-scroll" id="scroll-read">
       ${books.map(b => bookCardHTML(b, 'read')).join('')}
     </div>`
     attachCardListeners(bodyEl.querySelector('#scroll-read'), books, 'read')
+    expandedEl.innerHTML = ''
   } else {
+    bodyEl.style.display = 'none'
     visibleMonths = MONTHS_PER_PAGE
-    renderReadMonths(bodyEl, books)
+    renderReadMonths(expandedEl, books)
   }
 }
 
-function renderReadMonths(bodyEl, books) {
+// Month groups render OUTSIDE the shelf card so sticky headers work cleanly
+function renderReadMonths(expandedEl, books) {
   const groups  = groupByMonth(books)
   const visible = groups.slice(0, visibleMonths)
   const hasMore = groups.length > visibleMonths
 
-  bodyEl.innerHTML = `
-    <div class="read-expanded">
-      ${visible.map(({ label, books: gb }) => `
-        <div class="month-group">
-          <div class="month-group-title">${label}</div>
-          <div class="book-grid">${gb.map(b => bookCardHTML(b, 'read')).join('')}</div>
+  expandedEl.innerHTML = `
+    ${visible.map(({ label, books: gb }) => `
+      <div class="month-sticky-label">${label}</div>
+      <div class="shelf-section" style="margin-top:0;">
+        <div class="book-grid" style="padding:12px 16px 4px;">
+          ${gb.map(b => bookCardHTML(b, 'read')).join('')}
         </div>
-      `).join('')}
-      ${hasMore ? `
-        <button class="btn btn-tonal load-more-btn" style="width:100%;height:48px;margin-top:8px;">
-          <span class="material-symbols-rounded">expand_more</span>
-          Load older months (${groups.length - visibleMonths} more)
-        </button>` : ''}
-    </div>`
+      </div>
+    `).join('')}
+    ${hasMore ? `
+      <button class="btn btn-tonal load-more-btn"
+        style="width:calc(100% - 32px);margin:8px 16px 4px;height:48px;">
+        <span class="material-symbols-rounded">expand_more</span>
+        Load older months (${groups.length - visibleMonths} more)
+      </button>` : ''}
+  `
 
   const allVisible = visible.flatMap(g => g.books)
-  bodyEl.querySelectorAll('.book-card').forEach((card, i) => {
+  expandedEl.querySelectorAll('.book-card').forEach((card, i) => {
     card.addEventListener('click', async () => {
       try {
         const bookData = await getBook(allVisible[i].id)
@@ -260,9 +271,9 @@ function renderReadMonths(bodyEl, books) {
     })
   })
 
-  bodyEl.querySelector('.load-more-btn')?.addEventListener('click', () => {
+  expandedEl.querySelector('.load-more-btn')?.addEventListener('click', () => {
     visibleMonths += MONTHS_PER_PAGE
-    renderReadMonths(bodyEl, books)
+    renderReadMonths(expandedEl, books)
   })
 }
 
