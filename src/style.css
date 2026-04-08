@@ -1292,6 +1292,8 @@ html, body {
   align-items: center;
   gap: 16px;
   padding: 12px;
+  /* Added margin to push the cards away from the screen edges */
+  margin: 8px 16px; 
   background: var(--md-surface-container-lowest);
   border-radius: var(--md-shape-xl);
   box-shadow: var(--md-elevation-1);
