@@ -321,7 +321,7 @@ function bookCardHTML(book, shelf) {
     : ''
 
   const botmBadge = book.isBOTM
-    ? `<div class="botm-badge"><span class="material-symbols-rounded">auto_awesome</span></div>`
+    ? `<div class="botm-badge"><span class="material-symbols-rounded">workspace_premium</span></div>`
     : ''
 
   return `

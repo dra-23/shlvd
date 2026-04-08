@@ -272,7 +272,7 @@ function buildSheetHTML(book, existingShelf) {
 
       <!-- BotM toggle -->
       <button class="botm-toggle-btn" id="botm-btn">
-        <span class="material-symbols-rounded">auto_awesome</span>
+        <span class="material-symbols-rounded">workspace_premium</span>
         Book of the Month
       </button>
 

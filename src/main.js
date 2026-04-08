@@ -37,7 +37,7 @@ window.addEventListener('popstate', (e) => {
 const TAB_CONFIG = [
   { id: 'shelves', icon: 'auto_stories', label: 'Shelves' },
   { id: 'search',  icon: 'search',       label: 'Search'  },
-  { id: 'botm',    icon: 'auto_awesome', label: 'BotM'    },
+  { id: 'botm',    icon: 'workspace_premium', label: 'BotM'    },
   { id: 'profile', icon: 'person',       label: 'Profile' },
 ]
 
