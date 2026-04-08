@@ -30,7 +30,7 @@ export function renderBotm(container) {
       <div class="shelves-top" style="display:flex; align-items:center;">
         <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
         
-        <div style="height:52px; display:flex; align-items:center; margin-left:12px;">
+        <div style="height:54px; display:flex; align-items:center; margin-left:12px;">
           <span class="top-bar-title" style="margin:0;">Book of the Month</span>
         </div>
       </div>
