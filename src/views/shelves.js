@@ -246,7 +246,7 @@ function renderReadMonths(expandedEl, books) {
     ${visible.map(({ label, books: gb }) => `
       <div class="month-sticky-label">${label}</div>
       <div class="shelf-section" style="margin-top:0;">
-        <div class="book-grid" style="padding:12px 16px 4px;">
+        <div class="book-grid" style="padding:12px 8px 4px;">
           ${gb.map(b => bookCardHTML(b, 'read')).join('')}
         </div>
       </div>
