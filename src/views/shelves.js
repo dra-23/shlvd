@@ -32,7 +32,7 @@ export function renderShelves(container) {
     <div class="shelves-root">
 
       <div class="shelves-top">
-        <img src="/icons/logo-512.png" class="shelves-logo" alt="shlvd" />
+        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
         <div class="search-bar shelves-search-bar">
           <span class="material-symbols-rounded">search</span>
           <input class="search-input" id="shelf-search-input" type="text"

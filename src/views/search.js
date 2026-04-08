@@ -7,7 +7,8 @@ const SHELF_BADGE = { want: 'Want', reading: 'Reading', read: 'Read' }
 export function renderSearch(container) {
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;min-height:100%;">
-      <div class="top-bar">
+      <div class="top-bar" style="display:flex; align-items:center; gap:12px;">
+        <img src="/icons/logo2-512.png" alt="Logo" style="width:32px; height:32px; border-radius:8px; margin-left:16px;">
         <span class="top-bar-title">Search</span>
       </div>
 
