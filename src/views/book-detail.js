@@ -159,6 +159,34 @@ export function openBookDetail(book, existingShelf, onDone) {
 
   scrim.addEventListener('click', () => closeSheet('manual'))
   sheet.querySelector('#close-btn')?.addEventListener('click', () => closeSheet('manual'))
+
+  // ── Swipe down to dismiss ─────────────────────────────
+  let dragStartY = 0
+  let dragging = false
+
+  sheet.addEventListener('touchstart', e => {
+    dragStartY = e.touches[0].clientY
+    dragging = true
+    sheet.style.transition = 'none'
+  }, { passive: true })
+
+  sheet.addEventListener('touchmove', e => {
+    if (!dragging) return
+    const dy = e.touches[0].clientY - dragStartY
+    if (dy > 0) sheet.style.transform = `translateY(${dy}px)`
+  }, { passive: true })
+
+  sheet.addEventListener('touchend', e => {
+    if (!dragging) return
+    dragging = false
+    sheet.style.transition = ''
+    const dy = e.changedTouches[0].clientY - dragStartY
+    if (dy > 120) {
+      closeSheet('manual')
+    } else {
+      sheet.style.transform = ''
+    }
+  }, { passive: true })
 }
 
 function buildSheetHTML(book, existingShelf) {

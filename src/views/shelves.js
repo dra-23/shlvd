@@ -45,7 +45,7 @@ export function renderShelves(container) {
 
       <div id="shelf-search-results" style="display:none;flex:1;overflow-y:auto;"></div>
 
-      <div id="shelves-content" style="flex:1;overflow-y:auto;padding-bottom:16px;">
+      <div id="shelves-content" style="flex:1;overflow-y:auto;padding:8px 0 24px;">
 
         <!-- Reading -->
         <div class="shelf-section">
@@ -55,7 +55,6 @@ export function renderShelves(container) {
           </div>
           <div class="shelf-scroll" id="scroll-reading">${skeletonCards(3)}</div>
         </div>
-        <div class="divider"></div>
 
         <!-- Queued -->
         <div class="shelf-section">
@@ -65,7 +64,6 @@ export function renderShelves(container) {
           </div>
           <div class="shelf-scroll" id="scroll-want">${skeletonCards(3)}</div>
         </div>
-        <div class="divider"></div>
 
         <!-- Read -->
         <div class="shelf-section">

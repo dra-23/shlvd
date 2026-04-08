@@ -462,16 +462,21 @@ html, body {
   gap: 12px;
 }
 
-/* ── Shelf Section (legacy, keep for compatibility) ──── */
+/* ── Shelf Section ───────────────────────────────────── */
 .shelf-section {
-  padding: 8px 0 24px;
+  background: var(--md-surface-container-lowest);
+  border-radius: var(--md-shape-xl);
+  box-shadow: var(--md-elevation-1);
+  margin: 0 16px 12px;
+  padding: 16px 0 12px;
+  overflow: hidden;
 }
 
 .shelf-header {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 0 16px 12px;
+  padding: 0 16px 10px;
 }
 
 .shelf-title {
@@ -1402,7 +1407,7 @@ html, body {
 /* ── Shelf header flex fix for expand button ─────────── */
 .shelf-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   padding: 0 16px 12px;
 }
