@@ -4,8 +4,8 @@
   "description": "Your personal reading tracker",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F8FAF2",
-  "theme_color": "#386A20",
+  "background_color": "#f6f8f2",
+  "theme_color": "#98ab88",
   "orientation": "portrait-primary",
   "icons": [
     {

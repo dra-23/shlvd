@@ -260,22 +260,20 @@ function renderReadMonths(panelEl, books) {
   const hasMore = groups.length > visibleMonths
 
   panelEl.innerHTML = `
-    <div style="padding:0 16px 24px;">
-      ${visible.map(({ label, books: gb }) => `
-        <div class="month-group">
-          <div class="month-group-title">${label}</div>
-          <div class="book-grid">
-            ${gb.map(b => bookCardHTML(b, 'read')).join('')}
-          </div>
+    ${visible.map(({ label, books: gb }) => `
+      <div class="month-group">
+        <div class="month-group-title">${label}</div>
+        <div class="book-grid">
+          ${gb.map(b => bookCardHTML(b, 'read')).join('')}
         </div>
-      `).join('')}
-      ${hasMore ? `
-        <button class="btn btn-tonal load-more-btn" style="width:100%;height:48px;margin-top:8px;">
-          <span class="material-symbols-rounded">expand_more</span>
-          Load older months (${groups.length - visibleMonths} more)
-        </button>
-      ` : ''}
-    </div>
+      </div>
+    `).join('')}
+    ${hasMore ? `
+      <button class="btn btn-tonal load-more-btn" style="width:100%;height:48px;margin-top:8px;">
+        <span class="material-symbols-rounded">expand_more</span>
+        Load older months (${groups.length - visibleMonths} more)
+      </button>
+    ` : ''}
   `
 
   const allVisible = visible.flatMap(g => g.books)

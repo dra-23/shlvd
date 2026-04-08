@@ -451,11 +451,12 @@ html, body {
 .shelf-panel {
   flex: 0 0 100%;
   overflow-y: auto;
-  padding: 16px;
+  padding: 0 16px 24px;
   height: 100%;
 }
 
 .panel-grid {
+  padding-top: 16px;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
