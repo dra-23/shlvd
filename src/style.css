@@ -270,7 +270,7 @@ html, body {
   cursor: pointer;
   border-radius: var(--md-shape-lg);
   overflow: visible;
-  background: var(--md-surface-container-low);
+  background: transparent;
   -webkit-tap-highlight-color: transparent;
   box-shadow: var(--md-elevation-1);
 }
@@ -468,7 +468,7 @@ html, body {
 
 /* ── Shelf Section ───────────────────────────────────── */
 .shelf-section {
-  background: var(--custom-shelf-card);
+  background: var(--md-surface-container-lowest);
   border-radius: var(--md-shape-xl);
   box-shadow: var(--md-elevation-1);
   margin: 0 16px 12px;
@@ -492,7 +492,7 @@ html, body {
 .shelf-count {
   font-size: 0.875rem;
   font-weight: 600;
-  color: rgba(26, 28, 24, 0.7);
+  color: var(--md-on-surface-variant);
 }
 
 .shelf-scroll {
@@ -500,7 +500,6 @@ html, body {
   gap: 12px;
   padding: 4px 16px 8px;
   overflow-x: auto;
-  border-bottom: 4px solid rgba(0, 0, 0, 0.05);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
