@@ -271,9 +271,7 @@ html, body {
   border-radius: var(--md-shape-lg);
   overflow: visible;
   background: transparent;
-  -webkit-tap-highlight-color: transparent;
-  box-shadow: var(--md-elevation-1);
-}
+  -webkit-tap-highlight-color: transparent;}
 
 .book-card:active .book-cover { transform: scale(0.96); }
 
