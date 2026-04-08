@@ -252,7 +252,7 @@ html, body {
 
 /* ── Cards ───────────────────────────────────────────── */
 .card {
-  background: var(--md-surface-container-low);
+  background: var(--custom-shelf-card);
   border-radius: var(--md-shape-xl);
   overflow: hidden;
   position: relative;
@@ -270,13 +270,12 @@ html, body {
   cursor: pointer;
   border-radius: var(--md-shape-lg);
   overflow: visible;
-  background: var(--custom-shelf-card);
+  background: transparent;
   -webkit-tap-highlight-color: transparent;
   box-shadow: var(--md-elevation-1);
 }
 
-.book-card:active .book-cover { transform: scale(0.96); background: var(--md-surface-container-highest);
-}
+.book-card:active .book-cover { transform: scale(0.96); }
 
 .book-cover {
   width: 120px;
