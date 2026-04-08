@@ -23,7 +23,7 @@ export function renderBotm(container) {
       <div class="top-bar">
         <span class="top-bar-title">Book of the Month</span>
       </div>
-      <div id="botm-content" style="padding:0 16px 16px;flex:1;overflow-y:auto;">
+      <div id="botm-content" style="padding:0 0px 16px;flex:1;overflow-y:auto;">
         ${skeletonList()}
       </div>
     </div>

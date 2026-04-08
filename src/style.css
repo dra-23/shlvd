@@ -1409,7 +1409,7 @@ html, body {
   font-size: 1.125rem;
   font-weight: 800;
   color: var(--md-on-surface);
-  padding: 12px 0 6px;
+  padding: 12px 16px 6px;
   position: sticky;
   top: 0;
   background: var(--md-background);
