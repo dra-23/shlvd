@@ -227,6 +227,8 @@ html, body {
   gap: 4px;
   background: var(--md-surface);
   flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,.06);
+  z-index: 2;
 }
 
 .top-bar-title {
@@ -382,6 +384,8 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,.06);
+  z-index: 2;
 }
 
 .shelves-logo {
@@ -1081,10 +1085,33 @@ html, body {
 }
 
 .profile-actions {
-  padding: 8px 16px;
+  padding: 8px 16px 24px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* ── Profile Charts ───────────────────────────────────── */
+.chart-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 8px;
+}
+
+.chart-card {
+  background: var(--md-surface-container-lowest);
+  border-radius: var(--md-shape-xl);
+  box-shadow: var(--md-elevation-1);
+  padding: 16px 16px 12px;
+}
+
+.chart-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--md-on-surface-variant);
+  letter-spacing: 0.1px;
+  margin-bottom: 12px;
 }
 
 /* ── Loading / Skeleton ──────────────────────────────── */
