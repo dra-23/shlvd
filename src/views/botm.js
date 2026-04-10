@@ -48,6 +48,13 @@ function starHTML(rating) {
   ).join('')}</div>`
 }
 
+function formatDuration(days) {
+  if (days <= 1) return '1 day'
+  if (days < 14) return `${Math.round(days)} days`
+  if (days < 30) return `${Math.round(days / 7)} wks`
+  return `${Math.round(days / 30)} mo`
+}
+
 // ── BotM list view ────────────────────────────────────────────────────────────
 
 export function renderBotm(container) {
@@ -171,6 +178,20 @@ function buildPageHTML(book, monthLabel, monthBooks) {
   const pace = totalPages > 0 ? Math.round(totalPages / days) : 0
   const paceDisplay = pace > 0 ? pace : '—'
 
+  // Avg days per book this month
+  const withDates = monthBooks.filter(b => b.dateCompleted)
+  let avgDaysDisplay = '—'
+  if (count > 0) {
+    if (withDates.length >= 2) {
+      const earliest = new Date(Math.min(...withDates.map(b => b.dateCompleted.getTime())))
+      const latest   = new Date(Math.max(...withDates.map(b => b.dateCompleted.getTime())))
+      const span = Math.round((latest.getTime() - earliest.getTime()) / 86400000)
+      avgDaysDisplay = formatDuration(Math.round(span / (withDates.length - 1)))
+    } else {
+      avgDaysDisplay = formatDuration(Math.round(days / count))
+    }
+  }
+
   const hasRatings = rated.length > 0
   const hasAuthors = monthBooks.some(b => b.author)
   const hasGenres  = monthBooks.some(b => b.genre)
@@ -232,6 +253,10 @@ function buildPageHTML(book, monthLabel, monthBooks) {
         <div class="stat-card">
           <div class="stat-number">${paceDisplay}</div>
           <div class="stat-label">Pages / Day</div>
+        </div>
+        <div class="stat-card" style="grid-column:1/-1;">
+          <div class="stat-number">${avgDaysDisplay}</div>
+          <div class="stat-label">Days / Book</div>
         </div>
       </div>
 

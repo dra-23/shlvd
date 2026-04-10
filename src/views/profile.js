@@ -30,6 +30,8 @@ const DOUGHNUT_PALETTE = [
 ]
 
 let charts = {}
+let calState   = { year: 0, month: 0 }
+let calendarBooks = []
 
 function killCharts() {
   Object.values(charts).forEach(c => c?.destroy())
@@ -37,20 +39,66 @@ function killCharts() {
 }
 
 export function renderProfile(container) {
+  const now = new Date()
+  calState = { year: now.getFullYear(), month: now.getMonth() }
+  calendarBooks = []
+
   const user = auth.currentUser
   container.innerHTML = buildHTML(user)
 
   container.querySelector('#sign-out-btn').addEventListener('click', () => signOutUser())
+  initCalendar(container)
 
   const unsub = watchAllBooks(books => {
+    calendarBooks = books.filter(b => b.shelf === 'read' && b.dateCompleted)
     updateStats(container, books)
     buildCharts(container, books)
+    renderCalendarGrid(container)
   })
 
   return () => { unsub(); killCharts() }
 }
 
 export function destroyProfile() { killCharts() }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDuration(days) {
+  if (days <= 1) return '1 day'
+  if (days < 14) return `${Math.round(days)} days`
+  if (days < 30) return `${Math.round(days / 7)} wks`
+  return `${Math.round(days / 30)} mo`
+}
+
+function computeStreak(readBooks) {
+  const months = new Set()
+  readBooks.forEach(b => {
+    if (b.dateCompleted) {
+      const d = b.dateCompleted
+      months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+  })
+
+  const now = new Date()
+  let y = now.getFullYear()
+  let m = now.getMonth() + 1
+  let count = 0
+  let sinceKey = null
+
+  while (true) {
+    const key = `${y}-${String(m).padStart(2, '0')}`
+    if (!months.has(key)) break
+    count++
+    sinceKey = key
+    m--
+    if (m === 0) { m = 12; y-- }
+  }
+
+  if (!sinceKey) return { count: 0, since: null }
+  const [sy, sm] = sinceKey.split('-').map(Number)
+  const since = new Date(sy, sm - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  return { count, since }
+}
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
@@ -85,19 +133,37 @@ function updateStats(container, books) {
     ? `${(totalPages / 1000).toFixed(1)}k`
     : totalPages || '—'
 
-  // Average book length (all shelves with a page count)
-  const withPages = books.filter(b => b.pageCount > 0)
-  const avgLenEl = container.querySelector('[data-stat="avg-length"]')
-  if (avgLenEl) avgLenEl.textContent = withPages.length
-    ? Math.round(withPages.reduce((s, b) => s + b.pageCount, 0) / withPages.length)
-    : '—'
-
   // Average star rating (rated books only)
   const rated = books.filter(b => b.rating > 0)
   const avgRatingEl = container.querySelector('[data-stat="avg-rating"]')
   if (avgRatingEl) avgRatingEl.textContent = rated.length
     ? (rated.reduce((s, b) => s + b.rating, 0) / rated.length).toFixed(1)
     : '—'
+
+  // Average days between book completions
+  const withDate = books.filter(b => b.shelf === 'read' && b.dateCompleted)
+  const avgDaysEl = container.querySelector('[data-stat="avg-days"]')
+  if (avgDaysEl) {
+    if (withDate.length >= 2) {
+      const earliest = new Date(Math.min(...withDate.map(b => b.dateCompleted.getTime())))
+      const latest   = new Date(Math.max(...withDate.map(b => b.dateCompleted.getTime())))
+      const span = Math.round((latest.getTime() - earliest.getTime()) / 86400000)
+      avgDaysEl.textContent = formatDuration(Math.round(span / (withDate.length - 1)))
+    } else {
+      avgDaysEl.textContent = '—'
+    }
+  }
+
+  // Reading streak — consecutive months with ≥1 book completed
+  const readBooks = books.filter(b => b.shelf === 'read' && b.dateCompleted)
+  const streak = computeStreak(readBooks)
+  const streakEl     = container.querySelector('[data-stat="streak"]')
+  const streakSinceEl = container.querySelector('[data-stat="streak-since"]')
+  if (streakEl) streakEl.textContent = streak.count || '—'
+  if (streakSinceEl) {
+    streakSinceEl.textContent = streak.count > 1 && streak.since
+      ? `Since ${streak.since}` : ''
+  }
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────────
@@ -323,6 +389,65 @@ function yAxis(extra = {}) {
   return { grid: { color: C.grid }, border: { display: false }, ticks: { color: C.text, precision: 0 }, ...extra }
 }
 
+// ── Reading Calendar ──────────────────────────────────────────────────────────
+
+function initCalendar(container) {
+  container.querySelector('#cal-prev')?.addEventListener('click', () => {
+    calState.month--
+    if (calState.month < 0) { calState.month = 11; calState.year-- }
+    renderCalendarGrid(container)
+  })
+  container.querySelector('#cal-next')?.addEventListener('click', () => {
+    calState.month++
+    if (calState.month > 11) { calState.month = 0; calState.year++ }
+    renderCalendarGrid(container)
+  })
+}
+
+function renderCalendarGrid(container) {
+  const { year, month } = calState
+  const monthLabel = new Date(year, month, 1)
+    .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  const monthEl = container.querySelector('#cal-month-label')
+  if (monthEl) monthEl.textContent = monthLabel
+
+  const gridEl = container.querySelector('#cal-grid')
+  if (!gridEl) return
+
+  // Map day → books completed that day
+  const dayMap = new Map()
+  calendarBooks.forEach(b => {
+    const d = b.dateCompleted
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      const day = d.getDate()
+      if (!dayMap.has(day)) dayMap.set(day, [])
+      dayMap.get(day).push(b)
+    }
+  })
+
+  const firstDay = new Date(year, month, 1).getDay()  // 0 = Sun
+  const lastDay  = new Date(year, month + 1, 0).getDate()
+  const DAY_HDRS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+
+  let html = DAY_HDRS.map(d => `<div class="cal-day-header">${d}</div>`).join('')
+
+  for (let i = 0; i < firstDay; i++) html += `<div class="cal-day cal-day-empty"></div>`
+
+  const today = new Date()
+  for (let d = 1; d <= lastDay; d++) {
+    const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d
+    const bks = dayMap.get(d) || []
+    const chips = bks.map(b => `<div class="cal-book-chip">${b.title}</div>`).join('')
+    html += `<div class="cal-day${isToday ? ' cal-today' : ''}${bks.length ? ' cal-has-books' : ''}">
+      <div class="cal-day-num">${d}</div>
+      ${chips}
+    </div>`
+  }
+
+  gridEl.innerHTML = html
+}
+
 // ── HTML ──────────────────────────────────────────────────────────────────────
 
 function buildHTML(user) {
@@ -351,17 +476,27 @@ function buildHTML(user) {
           <div class="stat-number" data-stat="want">—</div>
           <div class="stat-label">Queued</div>
         </div>
+
+        <!-- Streak — full width -->
+        <div class="stat-card streak-card">
+          <div>
+            <div class="stat-number" data-stat="streak">—</div>
+            <div class="stat-label">Month Streak</div>
+          </div>
+          <div class="streak-since" data-stat="streak-since"></div>
+        </div>
+
         <div class="stat-card">
           <div class="stat-number" data-stat="pages">—</div>
           <div class="stat-label">Pages Read</div>
         </div>
         <div class="stat-card">
-          <div class="stat-number" data-stat="avg-length">—</div>
-          <div class="stat-label">Avg Length</div>
-        </div>
-        <div class="stat-card">
           <div class="stat-number" data-stat="avg-rating">—</div>
           <div class="stat-label">Avg Rating</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" data-stat="avg-days">—</div>
+          <div class="stat-label">Days / Book</div>
         </div>
       </div>
 
@@ -393,6 +528,22 @@ function buildHTML(user) {
           <div style="max-width:260px;margin:0 auto;">
             <canvas id="chart-genre-breakdown"></canvas>
           </div>
+        </div>
+      </div>
+
+      <!-- Reading Calendar -->
+      <div class="reading-calendar-section">
+        <div class="chart-card" style="padding:12px 16px 16px;">
+          <div class="cal-nav">
+            <button class="icon-btn" id="cal-prev" aria-label="Previous month">
+              <span class="material-symbols-rounded">chevron_left</span>
+            </button>
+            <span id="cal-month-label" class="chart-title" style="margin:0;flex:1;text-align:center;"></span>
+            <button class="icon-btn" id="cal-next" aria-label="Next month">
+              <span class="material-symbols-rounded">chevron_right</span>
+            </button>
+          </div>
+          <div id="cal-grid" class="cal-grid"></div>
         </div>
       </div>
 
