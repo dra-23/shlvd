@@ -1,5 +1,6 @@
 import { auth, signOutUser } from '../firebase.js'
-import { watchAllBooks } from '../db.js'
+import { watchAllBooks, getBook } from '../db.js'
+import { openBookDetail } from './book-detail.js'
 import { Chart, registerables } from 'chart.js'
 
 Chart.register(...registerables)
@@ -70,36 +71,6 @@ function formatDuration(days) {
   return `${Math.round(days / 30)} mo`
 }
 
-function computeStreak(readBooks) {
-  const months = new Set()
-  readBooks.forEach(b => {
-    if (b.dateCompleted) {
-      const d = b.dateCompleted
-      months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-    }
-  })
-
-  const now = new Date()
-  let y = now.getFullYear()
-  let m = now.getMonth() + 1
-  let count = 0
-  let sinceKey = null
-
-  while (true) {
-    const key = `${y}-${String(m).padStart(2, '0')}`
-    if (!months.has(key)) break
-    count++
-    sinceKey = key
-    m--
-    if (m === 0) { m = 12; y-- }
-  }
-
-  if (!sinceKey) return { count: 0, since: null }
-  const [sy, sm] = sinceKey.split('-').map(Number)
-  const since = new Date(sy, sm - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  return { count, since }
-}
-
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 function updateStats(container, books) {
@@ -154,16 +125,6 @@ function updateStats(container, books) {
     }
   }
 
-  // Reading streak — consecutive months with ≥1 book completed
-  const readBooks = books.filter(b => b.shelf === 'read' && b.dateCompleted)
-  const streak = computeStreak(readBooks)
-  const streakEl     = container.querySelector('[data-stat="streak"]')
-  const streakSinceEl = container.querySelector('[data-stat="streak-since"]')
-  if (streakEl) streakEl.textContent = streak.count || '—'
-  if (streakSinceEl) {
-    streakSinceEl.textContent = streak.count > 1 && streak.since
-      ? `Since ${streak.since}` : ''
-  }
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────────
@@ -438,7 +399,9 @@ function renderCalendarGrid(container) {
   for (let d = 1; d <= lastDay; d++) {
     const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d
     const bks = dayMap.get(d) || []
-    const chips = bks.map(b => `<div class="cal-book-chip">${b.title}</div>`).join('')
+    const chips = bks.map(b =>
+      `<button class="cal-book-chip" data-book-id="${b.id}">${b.title}</button>`
+    ).join('')
     html += `<div class="cal-day${isToday ? ' cal-today' : ''}${bks.length ? ' cal-has-books' : ''}">
       <div class="cal-day-num">${d}</div>
       ${chips}
@@ -446,6 +409,22 @@ function renderCalendarGrid(container) {
   }
 
   gridEl.innerHTML = html
+
+  // Wire up chip taps → open book detail sheet
+  gridEl.querySelectorAll('.cal-book-chip').forEach(chip => {
+    chip.addEventListener('click', async e => {
+      e.stopPropagation()
+      const id = chip.dataset.bookId
+      const book = calendarBooks.find(b => b.id === id)
+      if (!book) return
+      try {
+        const full = await getBook(id)
+        openBookDetail({ ...book, ...full }, 'read', null)
+      } catch {
+        openBookDetail(book, 'read', null)
+      }
+    })
+  })
 }
 
 // ── HTML ──────────────────────────────────────────────────────────────────────
@@ -476,16 +455,6 @@ function buildHTML(user) {
           <div class="stat-number" data-stat="want">—</div>
           <div class="stat-label">Queued</div>
         </div>
-
-        <!-- Streak — full width -->
-        <div class="stat-card streak-card">
-          <div>
-            <div class="stat-number" data-stat="streak">—</div>
-            <div class="stat-label">Month Streak</div>
-          </div>
-          <div class="streak-since" data-stat="streak-since"></div>
-        </div>
-
         <div class="stat-card">
           <div class="stat-number" data-stat="pages">—</div>
           <div class="stat-label">Pages Read</div>

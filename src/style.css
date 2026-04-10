@@ -1070,7 +1070,7 @@ html, body {
 }
 
 .stat-number {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 900;
   color: var(--md-primary);
   line-height: 1;
@@ -1684,10 +1684,12 @@ html, body {
 }
 
 .cal-book-chip {
+  font-family: inherit;
   font-size: 0.5625rem;
   font-weight: 700;
   color: var(--md-on-primary-container);
   background: var(--md-secondary-container);
+  border: none;
   border-radius: var(--md-shape-xs);
   padding: 1px 3px;
   line-height: 1.4;
@@ -1696,4 +1698,12 @@ html, body {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   word-break: break-word;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: opacity 100ms;
+}
+
+.cal-book-chip:active {
+  opacity: 0.65;
 }
