@@ -192,9 +192,11 @@ function buildPageHTML(book, monthLabel, monthBooks) {
     }
   }
 
-  const hasRatings = rated.length > 0
-  const hasAuthors = monthBooks.some(b => b.author)
-  const hasGenres  = monthBooks.some(b => b.genre)
+  const hasRatings    = rated.length > 0
+  const hasAuthors    = monthBooks.some(b => b.author)
+  const hasGenres     = monthBooks.some(b => b.genre)
+  const genreCount    = monthBooks.filter(b => b.genre).length
+  const hasGenresBar  = genreCount >= 2
 
   const coverHTML = book.thumbnail
     ? `<img src="${book.thumbnail}" alt="${book.title}" />`
@@ -222,6 +224,8 @@ function buildPageHTML(book, monthLabel, monthBooks) {
           <div class="botm-page-book-title">${book.title}</div>
           <div class="botm-page-book-author">${book.author}</div>
           ${book.genre ? `<div class="botm-page-book-meta">${book.genre}</div>` : ''}
+          ${book.dateReleased ? `<div class="botm-page-book-meta">Published ${book.dateReleased}</div>` : ''}
+          ${book.pageCount > 0 ? `<div class="botm-page-book-meta">${book.pageCount} pages</div>` : ''}
           ${dateDisplay ? `<div class="botm-page-book-meta">Completed ${dateDisplay}</div>` : ''}
           ${book.rating ? `<div style="margin-top:6px;">${starHTML(book.rating)}</div>` : ''}
         </div>
@@ -273,6 +277,12 @@ function buildPageHTML(book, monthLabel, monthBooks) {
         <div class="chart-card">
           <div class="chart-title">Authors</div>
           <canvas id="botm-chart-authors"></canvas>
+        </div>` : ''}
+
+        ${hasGenresBar ? `
+        <div class="chart-card">
+          <div class="chart-title">Top Genres</div>
+          <canvas id="botm-chart-genres-bar"></canvas>
         </div>` : ''}
 
         ${hasGenres ? `
@@ -341,6 +351,40 @@ function mountMonthCharts(el, books) {
           datasets: [{
             data: top.map(([, n]) => n),
             backgroundColor: C.primary2,
+            borderRadius: 6,
+            borderSkipped: false,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          indexAxis: 'y',
+          aspectRatio: top.length <= 2 ? 2.5 : 1.5,
+          animation: { duration: 400, easing: 'easeOutQuart' },
+          plugins: { legend: { display: false }, tooltip: tooltipStyle() },
+          scales: {
+            x: { grid: { color: C.grid }, border: { display: false }, ticks: { color: C.text, precision: 0 } },
+            y: { grid: { display: false }, border: { display: false }, ticks: { color: C.text } },
+          },
+        },
+      }))
+    }
+  }
+
+  // Horizontal bar — top 5 genres
+  const gbCtx = el.querySelector('#botm-chart-genres-bar')
+  if (gbCtx) {
+    const m = new Map()
+    books.forEach(b => { if (b.genre) m.set(b.genre, (m.get(b.genre) || 0) + 1) })
+    const top = Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    if (top.length) {
+      instances.push(new Chart(gbCtx, {
+        type: 'bar',
+        data: {
+          labels: top.map(([g]) => g),
+          datasets: [{
+            data: top.map(([, n]) => n),
+            backgroundColor: C.tertiary,
             borderRadius: 6,
             borderSkipped: false,
           }],
