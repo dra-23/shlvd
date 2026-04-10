@@ -20,16 +20,18 @@ function formatDisplayDate(date) {
   } catch { return '' }
 }
 
-export function openBookDetail(book, existingShelf, onDone) {
+export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMounted = null, onClose = null) {
   const scrim = document.createElement('div')
   scrim.className = 'sheet-scrim'
 
   const sheet = document.createElement('div')
   sheet.className = 'bottom-sheet'
-  sheet.innerHTML = buildSheetHTML(book, existingShelf)
+  sheet.innerHTML = buildSheetHTML(book, existingShelf, extraHTML)
 
   document.body.appendChild(scrim)
   document.body.appendChild(sheet)
+
+  if (onMounted) requestAnimationFrame(() => onMounted(sheet))
 
   // ── State ─────────────────────────────────────────────
   let selectedShelf = existingShelf || 'want'
@@ -152,6 +154,7 @@ export function openBookDetail(book, existingShelf, onDone) {
     if (source !== 'popstate') history.back()
     scrim.classList.add('closing')
     sheet.classList.add('closing')
+    onClose?.()
     setTimeout(() => { scrim.remove(); sheet.remove() }, 300)
   }
 
@@ -189,7 +192,7 @@ export function openBookDetail(book, existingShelf, onDone) {
   }, { passive: true })
 }
 
-function buildSheetHTML(book, existingShelf) {
+function buildSheetHTML(book, existingShelf, extraHTML = '') {
   const coverHTML = book.thumbnail
     ? `<img src="${book.thumbnail}" alt="${book.title}" />`
     : `<div class="book-cover-placeholder">
@@ -294,6 +297,8 @@ function buildSheetHTML(book, existingShelf) {
         <span class="material-symbols-rounded">delete</span>
         Remove from shelf
       </button>` : ''}
+
+      ${extraHTML}
 
     </div>
   `
