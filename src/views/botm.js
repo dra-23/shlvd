@@ -16,9 +16,11 @@ const C = {
   text:      '#44483d',
 }
 
-const GENRE_PALETTE = [
-  '#98ab88', '#d8ada8', '#afc49d', '#b5c4a8',
-  '#c49490', '#7d9070', '#e8c5c0', '#8fa882',
+const RATING_PALETTE = ['#e8c5c0', '#d8ada8', '#c9b99a', '#afc49d', '#7d9070']
+
+const DOUGHNUT_PALETTE = [
+  '#7d9070', '#c49490', '#98ab88', '#d8ada8',
+  '#afc49d', '#e8c5c0', '#b5c4a8', '#c9b99a',
 ]
 
 // All read books — kept fresh by a background watcher
@@ -121,8 +123,9 @@ function openBotmPage(book, viewEl) {
   page.style.transform = 'translateX(100%)'
   page.innerHTML = buildPageHTML(book, monthLabel, monthBooks)
 
-  // Append inside view-container (sibling of .view, above bottom nav)
-  viewEl.parentElement.appendChild(page)
+  // Append inside the .view so it's clipped by overflow-x:hidden during
+  // the slide animation and automatically removed when navigating away
+  viewEl.appendChild(page)
 
   // Slide in + mount charts
   let chartInstances = []
@@ -277,7 +280,7 @@ function mountMonthCharts(el, books) {
         labels: ['1 ★','2 ★','3 ★','4 ★','5 ★'],
         datasets: [{
           data: [1,2,3,4,5].map(n => m.get(n)),
-          backgroundColor: [C.tertiary3, C.tertiary, C.tertiary2, C.secondary, C.primary],
+          backgroundColor: RATING_PALETTE,
           borderWidth: 0,
           hoverOffset: 6,
         }],
@@ -347,7 +350,7 @@ function mountMonthCharts(el, books) {
           labels: entries.map(([g]) => g),
           datasets: [{
             data: entries.map(([, n]) => n),
-            backgroundColor: entries.map((_, i) => GENRE_PALETTE[i % GENRE_PALETTE.length]),
+            backgroundColor: entries.map((_, i) => DOUGHNUT_PALETTE[i % DOUGHNUT_PALETTE.length]),
             borderWidth: 0,
             hoverOffset: 6,
           }],

@@ -10,6 +10,7 @@ Chart.defaults.color       = '#44483d'
 const C = {
   primary:   '#98ab88',
   primary2:  '#b5c4a8',
+  primary3:  '#7d9070',
   secondary: '#afc49d',
   tertiary:  '#d8ada8',
   tertiary2: '#c49490',
@@ -17,6 +18,16 @@ const C = {
   grid:      '#e4e9e0',
   text:      '#44483d',
 }
+
+// 1★→5★: pale rose → warm sand → deep sage (clearly distinct)
+const RATING_PALETTE = ['#e8c5c0', '#d8ada8', '#c9b99a', '#afc49d', '#7d9070']
+
+// Alternates green/rose families at different lightness so every
+// adjacent slice contrasts regardless of how many genres there are
+const DOUGHNUT_PALETTE = [
+  '#7d9070', '#c49490', '#98ab88', '#d8ada8',
+  '#afc49d', '#e8c5c0', '#b5c4a8', '#c9b99a',
+]
 
 let charts = {}
 
@@ -44,12 +55,26 @@ export function destroyProfile() { killCharts() }
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 function updateStats(container, books) {
-  const c = { want: 0, reading: 0, read: 0 }
+  const c = { want: 0, read: 0 }
   books.forEach(b => { if (b.shelf in c) c[b.shelf]++ })
-  ;['want', 'reading', 'read'].forEach(s => {
+  ;['want', 'read'].forEach(s => {
     const el = container.querySelector(`[data-stat="${s}"]`)
     if (el) el.textContent = c[s]
   })
+
+  // Reading pace — total pages read ÷ days since first completed book
+  const readWithPages = books.filter(b => b.shelf === 'read' && b.pageCount > 0 && b.dateCompleted)
+  const paceEl = container.querySelector('[data-stat="pace"]')
+  if (paceEl) {
+    if (readWithPages.length) {
+      const totalPg  = readWithPages.reduce((s, b) => s + b.pageCount, 0)
+      const earliest = new Date(Math.min(...readWithPages.map(b => b.dateCompleted.getTime())))
+      const days     = Math.max(1, Math.round((Date.now() - earliest.getTime()) / 86400000))
+      paceEl.textContent = Math.round(totalPg / days)
+    } else {
+      paceEl.textContent = '—'
+    }
+  }
 
   // Total pages read
   const totalPages = books
@@ -85,6 +110,7 @@ function buildCharts(container, books) {
   chartRatings(container, books)
   chartAuthors(container, books)
   chartGenres(container, books)
+  chartGenreBreakdown(container, books)
 }
 
 // Bar — books read by year
@@ -159,7 +185,7 @@ function chartRatings(container, books) {
       labels: ['1 ★','2 ★','3 ★','4 ★','5 ★'],
       datasets: [{
         data: [1,2,3,4,5].map(n => m.get(n)),
-        backgroundColor: [C.tertiary3, C.tertiary, C.tertiary2, C.secondary, C.primary],
+        backgroundColor: RATING_PALETTE,
         borderWidth: 0,
         hoverOffset: 8,
       }],
@@ -214,6 +240,51 @@ function chartGenres(container, books) {
       datasets: [{ data: top.map(([, n]) => n), backgroundColor: C.tertiary, borderRadius: 6, borderSkipped: false }],
     },
     options: baseOpts({ indexAxis: 'y', aspectRatio: 1.4, scales: { x: yAxis(), y: xAxis() } }),
+  })
+}
+
+// Doughnut — genre percentage breakdown (all shelves)
+function chartGenreBreakdown(container, books) {
+  const m = new Map()
+  books.forEach(b => { if (b.genre) m.set(b.genre, (m.get(b.genre) || 0) + 1) })
+  const entries = Array.from(m.entries()).sort((a, b) => b[1] - a[1])
+  if (!entries.length) return
+  const ctx = container.querySelector('#chart-genre-breakdown')
+  if (!ctx) return
+  const total = entries.reduce((s, [, n]) => s + n, 0)
+  charts.genreBreakdown = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(([g]) => g),
+      datasets: [{
+        data: entries.map(([, n]) => n),
+        backgroundColor: entries.map((_, i) => DOUGHNUT_PALETTE[i % DOUGHNUT_PALETTE.length]),
+        borderWidth: 0,
+        hoverOffset: 8,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      cutout: '55%',
+      animation: { duration: 500, easing: 'easeOutQuart' },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'bottom',
+          labels: { padding: 14, color: C.text, font: { family: 'Nunito, system-ui', size: 12 } },
+        },
+        tooltip: {
+          ...tooltipStyle(),
+          callbacks: {
+            label: ctx => {
+              const pct = Math.round((ctx.raw / total) * 100)
+              return ` ${ctx.label}: ${ctx.raw} book${ctx.raw !== 1 ? 's' : ''} (${pct}%)`
+            },
+          },
+        },
+      },
+    },
   })
 }
 
@@ -273,8 +344,8 @@ function buildHTML(user) {
           <div class="stat-label">Read</div>
         </div>
         <div class="stat-card">
-          <div class="stat-number" data-stat="reading">—</div>
-          <div class="stat-label">Reading</div>
+          <div class="stat-number" data-stat="pace">—</div>
+          <div class="stat-label">Pages / Day</div>
         </div>
         <div class="stat-card">
           <div class="stat-number" data-stat="want">—</div>
@@ -316,6 +387,12 @@ function buildHTML(user) {
         <div class="chart-card">
           <div class="chart-title">Top 5 Genres</div>
           <canvas id="chart-genres"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Genre Breakdown</div>
+          <div style="max-width:260px;margin:0 auto;">
+            <canvas id="chart-genre-breakdown"></canvas>
+          </div>
         </div>
       </div>
 
