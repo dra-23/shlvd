@@ -7,6 +7,7 @@ Chart.register(...registerables)
 const C = {
   primary:   '#98ab88',
   primary2:  '#b5c4a8',
+  primary3:  '#7d9070',
   secondary: '#afc49d',
   tertiary:  '#d8ada8',
   tertiary2: '#c49490',
@@ -14,6 +15,12 @@ const C = {
   grid:      '#e4e9e0',
   text:      '#44483d',
 }
+
+// Enough distinct colours for a genre doughnut with up to 8 slices
+const GENRE_PALETTE = [
+  '#98ab88', '#d8ada8', '#afc49d', '#b5c4a8',
+  '#c49490', '#7d9070', '#e8c5c0', '#8fa882',
+]
 
 // All read books — kept fresh by a background watcher
 let allReadBooks = []
@@ -137,6 +144,7 @@ function buildMonthStatsHTML(label, books) {
     : (totalPages || '—')
 
   const hasRatings = rated.length > 0
+  const hasAuthors = books.some(b => b.author)
   const hasGenres  = books.some(b => b.genre)
 
   return `
@@ -166,10 +174,18 @@ function buildMonthStatsHTML(label, books) {
         </div>
       </div>` : ''}
 
+      ${hasAuthors ? `
+      <div class="chart-card" style="margin-bottom:8px;">
+        <div class="chart-title">Authors</div>
+        <canvas id="botm-chart-authors"></canvas>
+      </div>` : ''}
+
       ${hasGenres ? `
       <div class="chart-card">
-        <div class="chart-title">Genres</div>
-        <canvas id="botm-chart-genres"></canvas>
+        <div class="chart-title">Genre Breakdown</div>
+        <div style="max-width:240px;margin:0 auto;">
+          <canvas id="botm-chart-genres"></canvas>
+        </div>
       </div>` : ''}
     </div>
   `
@@ -213,20 +229,20 @@ function mountMonthCharts(sheet, books) {
     }))
   }
 
-  // Horizontal bar — genres
-  const gCtx = sheet.querySelector('#botm-chart-genres')
-  if (gCtx) {
+  // Horizontal bar — authors
+  const aCtx = sheet.querySelector('#botm-chart-authors')
+  if (aCtx) {
     const m = new Map()
-    books.forEach(b => { if (b.genre) m.set(b.genre, (m.get(b.genre) || 0) + 1) })
+    books.forEach(b => { if (b.author) m.set(b.author, (m.get(b.author) || 0) + 1) })
     const top = Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)
     if (top.length) {
-      instances.push(new Chart(gCtx, {
+      instances.push(new Chart(aCtx, {
         type: 'bar',
         data: {
-          labels: top.map(([g]) => g),
+          labels: top.map(([a]) => a),
           datasets: [{
             data: top.map(([, n]) => n),
-            backgroundColor: C.tertiary,
+            backgroundColor: C.primary2,
             borderRadius: 6,
             borderSkipped: false,
           }],
@@ -241,6 +257,51 @@ function mountMonthCharts(sheet, books) {
           scales: {
             x: { grid: { color: C.grid }, border: { display: false }, ticks: { color: C.text, precision: 0 } },
             y: { grid: { display: false }, border: { display: false }, ticks: { color: C.text } },
+          },
+        },
+      }))
+    }
+  }
+
+  // Doughnut — genre percentage breakdown
+  const gCtx = sheet.querySelector('#botm-chart-genres')
+  if (gCtx) {
+    const m = new Map()
+    books.forEach(b => { if (b.genre) m.set(b.genre, (m.get(b.genre) || 0) + 1) })
+    const entries = Array.from(m.entries()).sort((a, b) => b[1] - a[1])
+    if (entries.length) {
+      const total = entries.reduce((s, [, n]) => s + n, 0)
+      instances.push(new Chart(gCtx, {
+        type: 'doughnut',
+        data: {
+          labels: entries.map(([g]) => g),
+          datasets: [{
+            data: entries.map(([, n]) => n),
+            backgroundColor: entries.map((_, i) => GENRE_PALETTE[i % GENRE_PALETTE.length]),
+            borderWidth: 0,
+            hoverOffset: 6,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          cutout: '55%',
+          animation: { duration: 400, easing: 'easeOutQuart' },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: { padding: 12, color: C.text, font: { family: 'Nunito, system-ui', size: 11 } },
+            },
+            tooltip: {
+              ...tooltipStyle(),
+              callbacks: {
+                label: ctx => {
+                  const pct = Math.round((ctx.raw / total) * 100)
+                  return ` ${ctx.label}: ${ctx.raw} book${ctx.raw !== 1 ? 's' : ''} (${pct}%)`
+                },
+              },
+            },
           },
         },
       }))
