@@ -50,6 +50,29 @@ function updateStats(container, books) {
     const el = container.querySelector(`[data-stat="${s}"]`)
     if (el) el.textContent = c[s]
   })
+
+  // Total pages read
+  const totalPages = books
+    .filter(b => b.shelf === 'read' && b.pageCount > 0)
+    .reduce((sum, b) => sum + b.pageCount, 0)
+  const pagesEl = container.querySelector('[data-stat="pages"]')
+  if (pagesEl) pagesEl.textContent = totalPages >= 1000
+    ? `${(totalPages / 1000).toFixed(1)}k`
+    : totalPages || '—'
+
+  // Average book length (all shelves with a page count)
+  const withPages = books.filter(b => b.pageCount > 0)
+  const avgLenEl = container.querySelector('[data-stat="avg-length"]')
+  if (avgLenEl) avgLenEl.textContent = withPages.length
+    ? Math.round(withPages.reduce((s, b) => s + b.pageCount, 0) / withPages.length)
+    : '—'
+
+  // Average star rating (rated books only)
+  const rated = books.filter(b => b.rating > 0)
+  const avgRatingEl = container.querySelector('[data-stat="avg-rating"]')
+  if (avgRatingEl) avgRatingEl.textContent = rated.length
+    ? (rated.reduce((s, b) => s + b.rating, 0) / rated.length).toFixed(1)
+    : '—'
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────────
@@ -256,6 +279,18 @@ function buildHTML(user) {
         <div class="stat-card">
           <div class="stat-number" data-stat="want">—</div>
           <div class="stat-label">Queued</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" data-stat="pages">—</div>
+          <div class="stat-label">Pages Read</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" data-stat="avg-length">—</div>
+          <div class="stat-label">Avg Length</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" data-stat="avg-rating">—</div>
+          <div class="stat-label">Avg Rating</div>
         </div>
       </div>
 
