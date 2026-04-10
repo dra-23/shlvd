@@ -107,12 +107,15 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
     try {
       if (!existingShelf) {
         await addBook({
-          googleBooksId: book.googleBooksId,
-          title: book.title,
-          author: book.author,
-          thumbnail: book.thumbnail || '',
-          pageCount: book.pageCount || 0,
-          shelf: selectedShelf,
+          googleBooksId:  book.googleBooksId,
+          title:          book.title,
+          author:         book.author,
+          thumbnail:      book.thumbnail || '',
+          pageCount:      book.pageCount || 0,
+          shelf:          selectedShelf,
+          description:    book.description || '',
+          dateReleased:   book.publishedDate || book.dateReleased || '',
+          genre:          genre,
         })
         if (rating || notes || isBOTM || genre || updates.dateCompleted) {
           await updateBook(book.googleBooksId, updates)
@@ -214,7 +217,7 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
         <div class="sheet-title">${book.title}</div>
         <div class="sheet-author">${book.author}</div>
         <input type="text" class="genre-meta-input" id="genre-input"
-          value="${book.genre || ''}" placeholder="Add genre…" />
+          value="${book.genre || book.categories?.[0] || ''}" placeholder="Add genre…" />
         ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant)">Published ${book.dateReleased}</div>` : ''}
       </div>
       <button class="icon-btn" id="close-btn">

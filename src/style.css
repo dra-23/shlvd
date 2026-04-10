@@ -872,7 +872,7 @@ html, body {
 
 .star-btn .material-symbols-rounded { font-size: 32px; }
 
-.star-btn.filled {
+.star-btn.filled .material-symbols-rounded {
   color: #F5A623;
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
