@@ -1478,6 +1478,7 @@ html, body {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
+  align-items: start;
 }
 
 .book-grid .book-card {
@@ -1486,8 +1487,8 @@ html, body {
 
 .book-grid .book-cover {
   width: 100%;
-  height: auto;
-  aspect-ratio: 120 / 172;
+  height: 0;
+  padding-bottom: 143.33%; /* 172/120 × 100% — same ratio as the fixed 120×172 cover */
   position: relative;
   overflow: hidden;
 }
