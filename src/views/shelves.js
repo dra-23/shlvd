@@ -4,8 +4,9 @@ import { navigateTo } from '../main.js'
 
 const SHELVES = [
   { id: 'reading', label: 'Reading' },
-  { id: 'want',    label: 'Queued'  },
+  { id: 'want',    label: 'TBR'     },
   { id: 'read',    label: 'Read'    },
+  { id: 'dnf',     label: 'DNF'     },
 ]
 
 // Snackbar helper — exported for use by other views
@@ -20,8 +21,8 @@ export function showSnackbar(msg) {
   snackbarTimeout = setTimeout(() => el.remove(), 3000)
 }
 
-const allShelfBooks = { reading: [], want: [], read: [] }
-const SHELF_BADGE   = { reading: 'Reading', want: 'Queued', read: 'Read' }
+const allShelfBooks = { reading: [], want: [], read: [], dnf: [] }
+const SHELF_BADGE   = { reading: 'Reading', want: 'TBR', read: 'Read', dnf: 'DNF' }
 let expandedRead    = false
 let latestReadBooks = []
 const MONTHS_PER_PAGE = 6
@@ -56,10 +57,10 @@ export function renderShelves(container) {
           <div class="shelf-scroll" id="scroll-reading">${skeletonCards(3)}</div>
         </div>
 
-        <!-- Queued -->
+        <!-- TBR -->
         <div class="shelf-section">
           <div class="shelf-header">
-            <span class="shelf-title">Queued</span>
+            <span class="shelf-title">TBR</span>
             <span class="shelf-count" id="count-want"></span>
           </div>
           <div class="shelf-scroll" id="scroll-want">${skeletonCards(3)}</div>
@@ -82,6 +83,15 @@ export function renderShelves(container) {
 
         <!-- Expanded read months render here, outside the card -->
         <div id="shelf-read-expanded"></div>
+
+        <!-- DNF -->
+        <div class="shelf-section">
+          <div class="shelf-header">
+            <span class="shelf-title">DNF</span>
+            <span class="shelf-count" id="count-dnf"></span>
+          </div>
+          <div class="shelf-scroll" id="scroll-dnf">${skeletonCards(3)}</div>
+        </div>
 
       </div>
     </div>
@@ -111,7 +121,7 @@ export function renderShelves(container) {
     resultsEl.style.display = 'block'
     contentEl.style.display = 'none'
 
-    const all = [...allShelfBooks.reading, ...allShelfBooks.want, ...allShelfBooks.read]
+    const all = [...allShelfBooks.reading, ...allShelfBooks.want, ...allShelfBooks.read, ...allShelfBooks.dnf]
     const hits = all.filter(b =>
       b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q)
     )
@@ -171,7 +181,7 @@ export function renderShelves(container) {
   return () => unsubscribers.forEach(u => u())
 }
 
-// ── Horizontal scroll shelf (Reading / Queued) ────────────────────────────────
+// ── Horizontal scroll shelf (Reading / TBR / DNF) ────────────────────────────
 
 function renderShelfScroll(container, shelfId, books) {
   const scrollEl = container.querySelector(`#scroll-${shelfId}`)

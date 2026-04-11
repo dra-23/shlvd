@@ -2,7 +2,7 @@ import { addBook, updateBook, removeBook } from '../db.js'
 import { showSnackbar } from './shelves.js'
 import { backHandlerStack } from '../main.js'
 
-const SHELF_LABELS = { want: 'Want to Read', reading: 'Reading', read: 'Read' }
+const SHELF_LABELS = { want: 'TBR', reading: 'Reading', read: 'Read', dnf: 'DNF' }
 
 function tsToDateInput(date) {
   if (!date) return ''

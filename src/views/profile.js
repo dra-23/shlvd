@@ -453,7 +453,7 @@ function buildHTML(user) {
         </div>
         <div class="stat-card">
           <div class="stat-number" data-stat="want">—</div>
-          <div class="stat-label">Queued</div>
+          <div class="stat-label">TBR</div>
         </div>
         <div class="stat-card">
           <div class="stat-number" data-stat="pages">—</div>

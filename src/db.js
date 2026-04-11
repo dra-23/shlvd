@@ -49,6 +49,7 @@ function normalizeStatus(status) {
   const s = status.toLowerCase()
   if (s === 'read') return 'read'
   if (s === 'reading' || s === 'currentlyreading') return 'reading'
+  if (s === 'dnf') return 'dnf'
   return 'want'
 }
 
