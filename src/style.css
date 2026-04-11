@@ -1475,9 +1475,19 @@ html, body {
 }
 
 .book-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
+}
+
+.book-grid .book-card {
+  width: 100%;
+}
+
+.book-grid .book-cover {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 120 / 172;
 }
 
 /* ── Shelf header flex fix for expand button ─────────── */
