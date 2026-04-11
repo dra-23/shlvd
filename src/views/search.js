@@ -16,7 +16,7 @@ export function renderSearch(container) {
           <input 
             class="search-input" 
             id="search-input" 
-            type="search"
+            type="text"
             placeholder="Title, author, ISBN…" 
             autocomplete="off" 
             autocorrect="off"
