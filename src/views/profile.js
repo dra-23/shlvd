@@ -131,6 +131,11 @@ function updateStats(container, books) {
 
 function buildCharts(container, books) {
   killCharts()
+  // Animate chart section into view on first data load
+  const section = container.querySelector('.chart-section')
+  if (section && !section.classList.contains('charts-shown')) {
+    requestAnimationFrame(() => section.classList.add('charts-shown'))
+  }
   const read = books.filter(b => b.shelf === 'read' && b.dateCompleted)
   chartByYear(container, read)
   chartByMonth(container, read)
@@ -409,6 +414,12 @@ function renderCalendarGrid(container) {
   }
 
   gridEl.innerHTML = html
+
+  // Animate calendar section into view on first render
+  const calSection = container.querySelector('.reading-calendar-section')
+  if (calSection && !calSection.classList.contains('charts-shown')) {
+    requestAnimationFrame(() => calSection.classList.add('charts-shown'))
+  }
 
   // Wire up chip taps → open book detail sheet
   gridEl.querySelectorAll('.cal-book-chip').forEach(chip => {

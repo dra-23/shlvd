@@ -66,7 +66,6 @@ function shellHTML() {
 // Internal navigate — does NOT push history (used by popstate handler)
 function _navigateInternal(tab) {
   if (tab === activeTab) return
-  const prev = activeTab
   activeTab = tab
 
   if (activeViewDestroy) {
@@ -78,9 +77,7 @@ function _navigateInternal(tab) {
     btn.classList.toggle('active', btn.dataset.tab === tab)
   })
 
-  const order = TAB_CONFIG.map(t => t.id)
-  const direction = order.indexOf(tab) > order.indexOf(prev) ? 'left' : 'right'
-  swapView(tab, direction)
+  swapView(tab)
 }
 
 export function navigateTo(tab) {
@@ -89,29 +86,17 @@ export function navigateTo(tab) {
   _navigateInternal(tab)
 }
 
-function swapView(tab, direction = 'left') {
+function swapView(tab) {
   const container = document.getElementById('view-container')
   if (!container) return
 
-  const outgoing = container.querySelector('.view')
+  // Remove outgoing view immediately (no exit animation)
+  container.querySelector('.view')?.remove()
+
   const incoming = document.createElement('div')
-  incoming.className = `view view--enter-${direction}`
-
-  // Mount new view
+  incoming.className = 'view view--active'
   activeViewDestroy = mountView(tab, incoming)
-
-  if (outgoing) {
-    outgoing.classList.add(`view--exit-${direction}`)
-    container.appendChild(incoming)
-    requestAnimationFrame(() => {
-      incoming.classList.remove(`view--enter-${direction}`)
-      incoming.classList.add('view--active')
-    })
-    outgoing.addEventListener('animationend', () => outgoing.remove(), { once: true })
-  } else {
-    incoming.classList.add('view--active')
-    container.appendChild(incoming)
-  }
+  container.appendChild(incoming)
 }
 
 function mountView(tab, el) {

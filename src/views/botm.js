@@ -450,6 +450,11 @@ function mountMonthCharts(el, books) {
     }
   }
 
+  // Animate chart section in after mount
+  requestAnimationFrame(() => {
+    el.querySelector('.chart-section')?.classList.add('charts-shown')
+  })
+
   return instances
 }
 

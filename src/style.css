@@ -141,17 +141,15 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
-.view--active { z-index: 1; }
+.view--active {
+  z-index: 1;
+  animation: pageFadeIn 180ms ease-out both;
+}
 
-/* Page transitions */
-@keyframes slideInLeft  { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-@keyframes slideInRight { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-@keyframes slideOutLeft  { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 0; } }
-@keyframes slideOutRight { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
-
-.view--enter-left  { animation: slideInLeft  var(--md-duration-medium) var(--md-motion-decelerate) forwards; }
-.view--enter-right { animation: slideInRight var(--md-duration-medium) var(--md-motion-decelerate) forwards; }
-.view--exit-left   { animation: slideOutLeft  var(--md-duration-medium) var(--md-motion-accelerate) forwards; }
+@keyframes pageFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 .view--exit-right  { animation: slideOutRight var(--md-duration-medium) var(--md-motion-accelerate) forwards; }
 
 /* ── Bottom Navigation ───────────────────────────────── */
@@ -1097,6 +1095,16 @@ html, body {
   flex-direction: column;
   gap: 12px;
   padding: 0 16px 8px;
+}
+
+@keyframes chartFadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.chart-section.charts-shown,
+.reading-calendar-section.charts-shown {
+  animation: chartFadeUp 500ms var(--md-motion-decelerate) both;
 }
 
 .chart-card {
