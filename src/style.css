@@ -1488,6 +1488,18 @@ html, body {
   width: 100%;
   height: auto;
   aspect-ratio: 120 / 172;
+  position: relative;
+  overflow: hidden;
+}
+
+.book-grid .book-cover img,
+.book-grid .book-cover .book-cover-placeholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
 }
 
 /* ── Shelf header flex fix for expand button ─────────── */
