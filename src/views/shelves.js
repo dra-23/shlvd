@@ -215,14 +215,21 @@ function renderReadSection(container, books) {
   const expandedEl = container.querySelector('#shelf-read-expanded')
   if (!bodyEl || !expandedEl) return
 
-  if (countEl) countEl.textContent = books.length || ''
+  // Sort by most recently completed first; books without a date go to the end
+  const sorted = [...books].sort((a, b) => {
+    const da = a.dateCompleted ? new Date(a.dateCompleted).getTime() : 0
+    const db = b.dateCompleted ? new Date(b.dateCompleted).getTime() : 0
+    return db - da
+  })
+
+  if (countEl) countEl.textContent = sorted.length || ''
   if (expandBtn) {
     expandBtn.innerHTML = expandedRead
       ? `<span class="material-symbols-rounded" style="font-size:18px">expand_less</span> Collapse`
       : `<span class="material-symbols-rounded" style="font-size:18px">expand_more</span> View all`
   }
 
-  if (!books.length) {
+  if (!sorted.length) {
     bodyEl.innerHTML = `<div class="shelf-scroll"><div class="shelf-empty">
       No books here yet —
       <button class="btn btn-text" style="padding:0 4px;font-size:0.875rem;" data-goto="search">search to add one</button>
@@ -235,14 +242,14 @@ function renderReadSection(container, books) {
   if (!expandedRead) {
     bodyEl.style.display = 'block'
     bodyEl.innerHTML = `<div class="shelf-scroll" id="scroll-read">
-      ${books.map(b => bookCardHTML(b, 'read')).join('')}
+      ${sorted.map(b => bookCardHTML(b, 'read')).join('')}
     </div>`
-    attachCardListeners(bodyEl.querySelector('#scroll-read'), books, 'read')
+    attachCardListeners(bodyEl.querySelector('#scroll-read'), sorted, 'read')
     expandedEl.innerHTML = ''
   } else {
     bodyEl.style.display = 'none'
     visibleMonths = MONTHS_PER_PAGE
-    renderReadMonths(expandedEl, books)
+    renderReadMonths(expandedEl, sorted)
   }
 }
 
