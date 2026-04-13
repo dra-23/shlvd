@@ -195,6 +195,245 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
   }, { passive: true })
 }
 
+// ── Manual add ───────────────────────────────────────────────────────────────
+
+export function openManualAdd(onDone) {
+  const scrim = document.createElement('div')
+  scrim.className = 'sheet-scrim'
+
+  const sheet = document.createElement('div')
+  sheet.className = 'bottom-sheet'
+  sheet.innerHTML = `
+    <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
+
+    <div class="sheet-header" style="align-items:center;">
+      <div class="sheet-meta" style="flex:1;">
+        <div class="sheet-title" style="font-size:1.1rem;">Add Book Manually</div>
+      </div>
+      <button class="icon-btn" id="close-btn">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+    </div>
+
+    <div class="sheet-body">
+
+      <!-- Required fields -->
+      <div>
+        <div class="sheet-section-label">Title <span style="color:var(--md-error)">*</span></div>
+        <input type="text" class="manual-input" id="manual-title" placeholder="Book title" autocomplete="off" />
+      </div>
+
+      <div>
+        <div class="sheet-section-label">Author</div>
+        <input type="text" class="manual-input" id="manual-author" placeholder="Author name" autocomplete="off" />
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div class="sheet-section-label">Genre</div>
+          <input type="text" class="manual-input" id="manual-genre" placeholder="e.g. Fiction" autocomplete="off" />
+        </div>
+        <div>
+          <div class="sheet-section-label">Published</div>
+          <input type="text" class="manual-input" id="manual-published" placeholder="e.g. 2024" autocomplete="off" />
+        </div>
+      </div>
+
+      <div>
+        <div class="sheet-section-label">Page Count</div>
+        <input type="number" class="manual-input" id="manual-pages" placeholder="0" min="0" />
+      </div>
+
+      <div>
+        <div class="sheet-section-label">Description</div>
+        <textarea class="notes-textarea" id="manual-desc" placeholder="Short description…" style="min-height:80px;"></textarea>
+      </div>
+
+      <!-- Shelf -->
+      <div>
+        <div class="sheet-section-label">Shelf</div>
+        <div class="chips" id="manual-chips">
+          ${Object.entries(SHELF_LABELS).map(([id, label]) => `
+            <button class="chip shelf-chip ${id === 'want' ? 'selected' : ''}" data-shelf="${id}">${label}</button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div id="manual-progress-section" style="display:none">
+        <div class="sheet-section-label">Progress (pages)</div>
+        <div class="progress-row">
+          <div class="progress-input-wrap">
+            <span class="material-symbols-rounded" style="font-size:20px;color:var(--md-on-surface-variant)">bookmark</span>
+            <input type="number" class="progress-num-input" id="manual-progress" min="0" value="0" placeholder="0" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Date Completed -->
+      <div id="manual-date-section" style="display:none">
+        <div class="sheet-section-label">Date Completed</div>
+        <input type="date" class="date-input" id="manual-date-completed" />
+      </div>
+
+      <!-- Rating -->
+      <div>
+        <div class="sheet-section-label">Rating</div>
+        <div class="star-rating">
+          ${[1,2,3,4,5].map(n => `
+            <button class="star-btn" data-star="${n}">
+              <span class="material-symbols-rounded">star</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- BotM toggle -->
+      <button class="botm-toggle-btn" id="manual-botm-btn">
+        <span class="material-symbols-rounded">workspace_premium</span>
+        Book of the Month
+      </button>
+
+      <!-- Notes -->
+      <div>
+        <div class="sheet-section-label">Notes</div>
+        <textarea class="notes-textarea" id="manual-notes" placeholder="Your thoughts…"></textarea>
+      </div>
+
+      <button class="btn btn-filled" id="manual-save-btn" style="width:100%;height:48px">
+        <span class="material-symbols-rounded">add</span>
+        Add to shelf
+      </button>
+
+    </div>
+  `
+
+  document.body.appendChild(scrim)
+  document.body.appendChild(sheet)
+
+  // ── State ──────────────────────────────────────────────
+  let selectedShelf = 'want'
+  let rating = 0
+  let isBOTM = false
+
+  // ── Shelf chips ────────────────────────────────────────
+  sheet.querySelectorAll('.shelf-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      sheet.querySelectorAll('.shelf-chip').forEach(c => c.classList.remove('selected'))
+      chip.classList.add('selected')
+      selectedShelf = chip.dataset.shelf
+      sheet.querySelector('#manual-progress-section').style.display =
+        selectedShelf === 'reading' ? 'block' : 'none'
+      sheet.querySelector('#manual-date-section').style.display =
+        selectedShelf === 'read' ? 'block' : 'none'
+    })
+  })
+
+  // ── Stars ──────────────────────────────────────────────
+  const stars = sheet.querySelectorAll('.star-btn')
+  const setStars = n => {
+    rating = n
+    stars.forEach((s, i) => s.classList.toggle('filled', i < n))
+  }
+  stars.forEach((s, i) => s.addEventListener('click', () => setStars(rating === i + 1 ? 0 : i + 1)))
+
+  // ── BotM ───────────────────────────────────────────────
+  const botmBtn = sheet.querySelector('#manual-botm-btn')
+  const applyBotmUI = val => {
+    botmBtn.classList.toggle('active', val)
+    botmBtn.querySelector('.material-symbols-rounded').style.fontVariationSettings =
+      val ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+  }
+  botmBtn.addEventListener('click', () => { isBOTM = !isBOTM; applyBotmUI(isBOTM) })
+
+  // ── Save ───────────────────────────────────────────────
+  sheet.querySelector('#manual-save-btn').addEventListener('click', async () => {
+    const title = sheet.querySelector('#manual-title').value.trim()
+    if (!title) {
+      sheet.querySelector('#manual-title').focus()
+      sheet.querySelector('#manual-title').classList.add('input-error')
+      return
+    }
+    const author      = sheet.querySelector('#manual-author').value.trim() || 'Unknown author'
+    const genre       = sheet.querySelector('#manual-genre').value.trim()
+    const published   = sheet.querySelector('#manual-published').value.trim()
+    const pages       = parseInt(sheet.querySelector('#manual-pages').value || '0', 10)
+    const description = sheet.querySelector('#manual-desc').value.trim()
+    const notes       = sheet.querySelector('#manual-notes').value.trim()
+    const progress    = parseInt(sheet.querySelector('#manual-progress')?.value || '0', 10)
+    const dateStr     = sheet.querySelector('#manual-date-completed')?.value
+
+    const bookId = `manual_${Date.now()}`
+
+    try {
+      await addBook({
+        googleBooksId: bookId,
+        title,
+        author,
+        thumbnail: '',
+        pageCount: pages,
+        shelf: selectedShelf,
+        description,
+        dateReleased: published,
+        genre,
+      })
+
+      const updates = { rating, notes, isBOTM, genre }
+      if (selectedShelf === 'reading') updates.progress = progress
+      if (selectedShelf === 'read' && dateStr) {
+        updates.dateCompleted = new Date(dateStr + 'T12:00:00')
+      }
+
+      if (rating || notes || isBOTM || genre || updates.dateCompleted) {
+        await updateBook(bookId, updates)
+      }
+
+      showSnackbar(`Added to ${SHELF_LABELS[selectedShelf]}`)
+      closeSheet('manual')
+      onDone?.()
+    } catch (err) {
+      console.error(err)
+      showSnackbar('Something went wrong')
+    }
+  })
+
+  // ── Close ──────────────────────────────────────────────
+  history.pushState({ sheet: true }, '')
+
+  function closeSheet(source) {
+    const idx = backHandlerStack.indexOf(closeSheet)
+    if (idx !== -1) backHandlerStack.splice(idx, 1)
+    if (source !== 'popstate') history.back()
+    scrim.classList.add('closing')
+    sheet.classList.add('closing')
+    setTimeout(() => { scrim.remove(); sheet.remove() }, 300)
+  }
+
+  backHandlerStack.push(closeSheet)
+
+  scrim.addEventListener('click', () => closeSheet('manual'))
+  sheet.querySelector('#close-btn').addEventListener('click', () => closeSheet('manual'))
+
+  // ── Swipe to dismiss ───────────────────────────────────
+  let dragStartY = 0, dragging = false
+  sheet.addEventListener('touchstart', e => {
+    dragStartY = e.touches[0].clientY; dragging = true; sheet.style.transition = 'none'
+  }, { passive: true })
+  sheet.addEventListener('touchmove', e => {
+    if (!dragging) return
+    const dy = e.touches[0].clientY - dragStartY
+    if (dy > 0) sheet.style.transform = `translateY(${dy}px)`
+  }, { passive: true })
+  sheet.addEventListener('touchend', e => {
+    if (!dragging) return
+    dragging = false; sheet.style.transition = ''
+    const dy = e.changedTouches[0].clientY - dragStartY
+    if (dy > 120) closeSheet('manual'); else sheet.style.transform = ''
+  }, { passive: true })
+}
+
+// ── Book detail sheet ─────────────────────────────────────────────────────────
+
 function buildSheetHTML(book, existingShelf, extraHTML = '') {
   const coverHTML = book.thumbnail
     ? `<img src="${book.thumbnail}" alt="${book.title}" />`

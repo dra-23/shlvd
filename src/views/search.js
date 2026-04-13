@@ -1,24 +1,24 @@
 import { searchBooks } from '../books-api.js'
 import { getBook } from '../db.js'
-import { openBookDetail } from './book-detail.js'
+import { openBookDetail, openManualAdd } from './book-detail.js'
 
 const SHELF_BADGE = { want: 'Want', reading: 'Reading', read: 'Read' }
 
 export function renderSearch(container) {
   container.innerHTML = `
     <div style="display:flex;flex-direction:column;height:100%;">
-      
+
       <div class="shelves-top">
         <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
-        
+
         <div class="search-bar shelves-search-bar" style="flex:1;">
           <span class="material-symbols-rounded">search</span>
-          <input 
-            class="search-input" 
-            id="search-input" 
+          <input
+            class="search-input"
+            id="search-input"
             type="text"
-            placeholder="Title, author, ISBN…" 
-            autocomplete="off" 
+            placeholder="Title, author, ISBN…"
+            autocomplete="off"
             autocorrect="off"
             spellcheck="false"
             enterkeyhint="search"
@@ -29,8 +29,14 @@ export function renderSearch(container) {
         </div>
       </div>
 
-      <div id="search-results" style="flex:1; overflow-y:auto; padding-top: 8px;">
-        </div>
+      <div id="search-results" style="flex:1; overflow-y:auto; padding-top: 8px;"></div>
+
+      <div class="manual-add-footer">
+        <button class="manual-add-btn" id="manual-add-btn">
+          <span class="material-symbols-rounded">edit_note</span>
+          Can't find it? Add manually
+        </button>
+      </div>
 
     </div>
   `
@@ -64,6 +70,18 @@ export function renderSearch(container) {
   })
 
   results.innerHTML = emptyPrompt()
+
+  // Manual add
+  container.querySelector('#manual-add-btn').addEventListener('click', () => {
+    openManualAdd(() => {
+      // Refresh badges after a manual add
+      const q = input.value.trim()
+      if (q.length >= 3) {
+        results.innerHTML = loadingHTML()
+        setTimeout(() => doSearch(q, results), 300)
+      }
+    })
+  })
 
   // Focus input after mount
   setTimeout(() => input.focus(), 150)
@@ -127,7 +145,10 @@ function resultRowHTML(book) {
       <div class="search-result-info">
         <div class="search-result-title">${book.title}</div>
         <div class="search-result-author">${book.author}</div>
-        ${book.publishedDate ? `<div class="body-small mt-4" style="color:var(--md-on-surface-variant)">${book.publishedDate.substring(0,4)}</div>` : ''}
+        <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+          ${book.publishedDate ? `<span class="body-small" style="color:var(--md-on-surface-variant)">${book.publishedDate.substring(0,4)}</span>` : ''}
+          ${book.source === 'openlibrary' ? `<span class="source-badge">Open Library</span>` : ''}
+        </div>
       </div>
       ${badge}
     </div>

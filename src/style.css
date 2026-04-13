@@ -1295,6 +1295,66 @@ html, body {
   -webkit-line-clamp: unset;
 }
 
+/* ── Manual Add Inputs ───────────────────────────────── */
+.manual-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 0 8px;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--md-outline-variant);
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.9375rem;
+  color: var(--md-on-surface);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color var(--md-duration-short);
+}
+.manual-input::placeholder { color: var(--md-outline); }
+.manual-input:focus { border-bottom-color: var(--md-primary); }
+.manual-input.input-error { border-bottom-color: var(--md-error); }
+
+/* ── Manual Add Footer ───────────────────────────────── */
+.manual-add-footer {
+  padding: 8px 16px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--md-outline-variant);
+  background: var(--md-surface);
+  flex-shrink: 0;
+}
+
+.manual-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  background: var(--md-surface-container);
+  border: none;
+  border-radius: var(--md-shape-full);
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--md-duration-short), color var(--md-duration-short);
+}
+.manual-add-btn:active { background: var(--md-surface-container-high); color: var(--md-on-surface); }
+.manual-add-btn .material-symbols-rounded { font-size: 20px; }
+
+/* ── Source Badge (search results) ──────────────────── */
+.source-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--md-on-tertiary-container);
+  background: var(--md-tertiary-container);
+  border-radius: var(--md-shape-xs);
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
 /* ── BotM Badge on book cards ────────────────────────── */
 .botm-badge {
   position: absolute;
