@@ -100,8 +100,11 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
 
     const updates = { shelf: selectedShelf, rating, notes, isBOTM, genre }
     if (selectedShelf === 'reading') updates.progress = progress
-    if (selectedShelf === 'read' && dateStr) {
-      updates.dateCompleted = new Date(dateStr + 'T12:00:00')
+    if (selectedShelf === 'read') {
+      // Use the entered date, or fall back to today so pace stats always have a date
+      updates.dateCompleted = dateStr
+        ? new Date(dateStr + 'T12:00:00')
+        : new Date()
     }
 
     try {
@@ -457,7 +460,10 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
         <div class="sheet-author">${book.author}</div>
         <input type="text" class="genre-meta-input" id="genre-input"
           value="${book.genre || book.categories?.[0] || ''}" placeholder="Add genre…" />
-        ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant)">Published ${book.dateReleased}</div>` : ''}
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px;">
+          ${book.pageCount > 0 ? `<div class="body-small" style="color:var(--md-on-surface-variant)">${book.pageCount} pages</div>` : ''}
+          ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant)">Published ${book.dateReleased}</div>` : ''}
+        </div>
       </div>
       <button class="icon-btn" id="close-btn">
         <span class="material-symbols-rounded">close</span>
