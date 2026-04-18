@@ -460,10 +460,8 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
         <div class="sheet-author">${book.author}</div>
         <input type="text" class="genre-meta-input" id="genre-input"
           value="${book.genre || book.categories?.[0] || ''}" placeholder="Add genre…" />
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px;">
-          ${book.pageCount > 0 ? `<div class="body-small" style="color:var(--md-on-surface-variant)">${book.pageCount} pages</div>` : ''}
-          ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant)">Published ${book.dateReleased}</div>` : ''}
-        </div>
+        ${book.pageCount > 0 ? `<div class="body-small" style="color:var(--md-on-surface-variant);margin-top:2px;">${book.pageCount} pages</div>` : ''}
+        ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant);">Published ${book.dateReleased}</div>` : ''}
       </div>
       <button class="icon-btn" id="close-btn">
         <span class="material-symbols-rounded">close</span>
