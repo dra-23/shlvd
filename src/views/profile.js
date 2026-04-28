@@ -192,9 +192,12 @@ function chartByMonth(container, read) {
         fill: true,
         tension: 0.35,
         pointRadius: data.length > 24 ? 2 : 4,
+        pointHoverRadius: data.length > 24 ? 5 : 7,
+        pointHitRadius: 24,
       }],
     },
     options: baseOpts({
+      interaction: { mode: 'index', intersect: false },
       scales: {
         x: xAxis({ ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 12 } }),
         y: yAxis(),
