@@ -503,8 +503,11 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
       <!-- Date Completed (read only) -->
       <div id="date-completed-section" style="display:${existingShelf === 'read' ? 'block' : 'none'}">
         <div class="sheet-section-label">Date Completed</div>
-        <input type="date" class="date-input" id="date-completed-input"
-          value="${tsToDateInput(book.dateCompleted)}" />
+        <div class="date-input-wrap">
+          <input type="date" class="date-input" id="date-completed-input"
+            value="${tsToDateInput(book.dateCompleted)}" />
+          <span class="material-symbols-rounded date-input-icon">calendar_month</span>
+        </div>
       </div>
 
       <!-- Rating -->

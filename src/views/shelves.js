@@ -347,6 +347,7 @@ function bookCardHTML(book, shelf) {
       <div class="book-card-info">
         <div class="book-card-title">${book.title}</div>
         <div class="book-card-author">${book.author}</div>
+        ${book.rating > 0 ? `<div class="book-card-rating">${'★'.repeat(book.rating)}${'☆'.repeat(5 - book.rating)}</div>` : ''}
         ${progressHTML}
       </div>
     </div>`
