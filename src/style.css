@@ -1263,6 +1263,8 @@ html, body {
   color: var(--md-on-surface);
   outline: none;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .date-input::-webkit-calendar-picker-indicator {
