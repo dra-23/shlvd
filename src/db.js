@@ -39,6 +39,8 @@ function normalize(id, d) {
     genre:         d.genre        || '',
     description:   d.description  || '',
     dateReleased:  d.dateReleased  || '',
+    series:        d.series        || '',
+    seriesNumber:  d.seriesNumber  || '',
     dateCompleted: toDate(d.dateCompleted),
     addedAt:       toDate(d.addedAt) || toDate(d.dateCompleted),
   }
@@ -68,6 +70,8 @@ export const addBook = async (bookData) => {
     description:   bookData.description || '',
     genre:         bookData.genre || '',
     dateReleased:  bookData.dateReleased || '',
+    series:        bookData.series || '',
+    seriesNumber:  bookData.seriesNumber || '',
     isBOTM:        false,
     bookId:        bookData.googleBooksId,
     libraryId:     bookData.googleBooksId,
@@ -86,6 +90,8 @@ export const updateBook = async (id, updates) => {
   if ('progress'      in updates) dbUpdates.progress      = updates.progress
   if ('isBOTM'        in updates) dbUpdates.isBOTM        = updates.isBOTM
   if ('genre'         in updates) dbUpdates.genre         = updates.genre
+  if ('series'        in updates) dbUpdates.series        = updates.series
+  if ('seriesNumber'  in updates) dbUpdates.seriesNumber  = updates.seriesNumber
   if ('thumbnail'     in updates) dbUpdates.cover         = updates.thumbnail
   if ('dateCompleted' in updates) dbUpdates.dateCompleted = updates.dateCompleted
   await updateDoc(ref, dbUpdates)

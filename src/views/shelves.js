@@ -21,12 +21,13 @@ export function showSnackbar(msg) {
   snackbarTimeout = setTimeout(() => el.remove(), 3000)
 }
 
-const allShelfBooks = { reading: [], want: [], read: [], dnf: [] }
-const SHELF_BADGE   = { reading: 'Reading', want: 'TBR', read: 'Read', dnf: 'DNF' }
-let expandedRead    = false
-let latestReadBooks = []
+const allShelfBooks  = { reading: [], want: [], read: [], dnf: [] }
+const SHELF_BADGE    = { reading: 'Reading', want: 'TBR', read: 'Read', dnf: 'DNF' }
+let expandedRead     = false
+let latestReadBooks  = []
 const MONTHS_PER_PAGE = 6
 let visibleMonths     = MONTHS_PER_PAGE
+const expandedSeries  = new Set()
 
 export function renderShelves(container) {
   container.innerHTML = `
@@ -91,6 +92,15 @@ export function renderShelves(container) {
             <span class="shelf-count" id="count-dnf"></span>
           </div>
           <div class="shelf-scroll" id="scroll-dnf">${skeletonCards(3)}</div>
+        </div>
+
+        <!-- Series -->
+        <div class="shelf-section" id="shelf-series-section">
+          <div class="shelf-header">
+            <span class="shelf-title">Series</span>
+            <span class="shelf-count" id="count-series"></span>
+          </div>
+          <div id="series-list"></div>
         </div>
 
       </div>
@@ -175,6 +185,7 @@ export function renderShelves(container) {
       } else {
         renderShelfScroll(container, shelf.id, books)
       }
+      renderSeriesSection(container)
     })
   )
 
@@ -349,6 +360,141 @@ function bookCardHTML(book, shelf) {
         <div class="book-card-author">${book.author}</div>
         ${book.rating > 0 ? `<div class="book-card-rating">${'★'.repeat(book.rating)}${'☆'.repeat(5 - book.rating)}</div>` : ''}
         ${progressHTML}
+      </div>
+    </div>`
+}
+
+// ── Series section ────────────────────────────────────────────────────────────
+
+function renderSeriesSection(container) {
+  const listEl  = container.querySelector('#series-list')
+  const countEl = container.querySelector('#count-series')
+  if (!listEl) return
+
+  const allBooks = [
+    ...allShelfBooks.reading,
+    ...allShelfBooks.want,
+    ...allShelfBooks.read,
+    ...allShelfBooks.dnf,
+  ].filter(b => b.series)
+
+  // Group by series name
+  const map = new Map()
+  allBooks.forEach(b => {
+    if (!map.has(b.series)) map.set(b.series, [])
+    map.get(b.series).push(b)
+  })
+
+  if (countEl) countEl.textContent = map.size || ''
+
+  if (!map.size) {
+    listEl.innerHTML = `<div class="shelf-empty" style="padding:12px 16px;">
+      No series yet — add a series name when editing a book.
+    </div>`
+    return
+  }
+
+  // Sort series alphabetically
+  const series = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+
+  listEl.innerHTML = series.map(([name, books]) => seriesCardHTML(name, books)).join('')
+
+  // Wire expand buttons
+  listEl.querySelectorAll('.series-expand-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation()
+      const name    = btn.dataset.series
+      const card    = btn.closest('.series-card')
+      const bookList = card.querySelector('.series-book-list')
+      const icon    = btn.querySelector('.material-symbols-rounded')
+      if (expandedSeries.has(name)) {
+        expandedSeries.delete(name)
+        bookList.style.display = 'none'
+        icon.textContent = 'expand_more'
+      } else {
+        expandedSeries.add(name)
+        bookList.style.display = 'block'
+        icon.textContent = 'expand_less'
+      }
+    })
+  })
+
+  // Wire book taps in expanded list
+  listEl.querySelectorAll('.series-book-row').forEach(row => {
+    row.addEventListener('click', async () => {
+      const id = row.dataset.id
+      const book = allBooks.find(b => b.id === id)
+      if (!book) return
+      try {
+        const full = await getBook(id)
+        openBookDetail({ ...book, ...full }, book.shelf, () => renderSeriesSection(container))
+      } catch {
+        openBookDetail(book, book.shelf, () => renderSeriesSection(container))
+      }
+    })
+  })
+}
+
+function seriesCardHTML(name, books) {
+  // Sort books by series number (numeric)
+  const sorted = [...books].sort((a, b) => {
+    const na = parseFloat(a.seriesNumber) || 0
+    const nb = parseFloat(b.seriesNumber) || 0
+    return na - nb
+  })
+
+  const readCount = sorted.filter(b => b.shelf === 'read').length
+  const total     = sorted.length
+  const pct       = total ? Math.round((readCount / total) * 100) : 0
+
+  const nextBook = sorted.find(b => b.shelf !== 'read')
+  const nextLabel = nextBook
+    ? `${nextBook.seriesNumber ? `#${nextBook.seriesNumber} · ` : ''}${nextBook.title}`
+    : 'All read!'
+
+  const isExpanded = expandedSeries.has(name)
+
+  const bookRows = sorted.map(b => {
+    const badge = SHELF_BADGE[b.shelf] || b.shelf
+    const badgeClass = b.shelf === 'read' ? 'series-badge-read' : 'series-badge-other'
+    return `
+      <div class="series-book-row" data-id="${b.id}">
+        <div class="series-book-cover">
+          ${b.thumbnail ? `<img src="${b.thumbnail}" alt="${b.title}" loading="lazy" />` : ''}
+        </div>
+        <div class="series-book-info">
+          ${b.seriesNumber ? `<span class="series-book-num">#${b.seriesNumber}</span>` : ''}
+          <span class="series-book-title">${b.title}</span>
+        </div>
+        <span class="series-book-badge ${badgeClass}">${badge}</span>
+      </div>`
+  }).join('')
+
+  return `
+    <div class="series-card">
+      <div class="series-card-header">
+        <div class="series-card-info">
+          <div class="series-card-name">${name}</div>
+          <div class="series-card-count">${readCount} of ${total} read</div>
+        </div>
+        <button class="icon-btn series-expand-btn" data-series="${name}">
+          <span class="material-symbols-rounded">${isExpanded ? 'expand_less' : 'expand_more'}</span>
+        </button>
+      </div>
+      <div class="series-progress-bar">
+        <div class="series-progress-fill" style="width:${pct}%"></div>
+      </div>
+      ${nextBook ? `
+      <div class="series-next">
+        <span class="material-symbols-rounded">auto_stories</span>
+        ${nextLabel}
+      </div>` : `
+      <div class="series-next series-next-done">
+        <span class="material-symbols-rounded">check_circle</span>
+        All books read!
+      </div>`}
+      <div class="series-book-list" style="display:${isExpanded ? 'block' : 'none'}">
+        ${bookRows}
       </div>
     </div>`
 }

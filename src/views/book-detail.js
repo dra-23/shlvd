@@ -93,12 +93,14 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
 
   // ── Save ──────────────────────────────────────────────
   sheet.querySelector('#save-btn').addEventListener('click', async () => {
-    const progress = parseInt(sheet.querySelector('#progress-input')?.value || '0', 10)
-    const notes = sheet.querySelector('#notes-input')?.value.trim() || ''
-    const genre = sheet.querySelector('#genre-input')?.value.trim() || ''
-    const dateStr = sheet.querySelector('#date-completed-input')?.value
+    const progress     = parseInt(sheet.querySelector('#progress-input')?.value || '0', 10)
+    const notes        = sheet.querySelector('#notes-input')?.value.trim() || ''
+    const genre        = sheet.querySelector('#genre-input')?.value.trim() || ''
+    const series       = sheet.querySelector('#series-input')?.value.trim() || ''
+    const seriesNumber = sheet.querySelector('#series-num-input')?.value.trim() || ''
+    const dateStr      = sheet.querySelector('#date-completed-input')?.value
 
-    const updates = { shelf: selectedShelf, rating, notes, isBOTM, genre }
+    const updates = { shelf: selectedShelf, rating, notes, isBOTM, genre, series, seriesNumber }
     if (selectedShelf === 'reading') updates.progress = progress
     if (selectedShelf === 'read') {
       // Use the entered date, or fall back to today so pace stats always have a date
@@ -118,9 +120,11 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
           shelf:          selectedShelf,
           description:    book.description || '',
           dateReleased:   book.publishedDate || book.dateReleased || '',
-          genre:          genre,
+          genre,
+          series,
+          seriesNumber,
         })
-        if (rating || notes || isBOTM || genre || updates.dateCompleted) {
+        if (rating || notes || isBOTM || genre || series || seriesNumber || updates.dateCompleted) {
           await updateBook(book.googleBooksId, updates)
         }
         showSnackbar(`Added to ${SHELF_LABELS[selectedShelf]}`)
@@ -247,6 +251,17 @@ export function openManualAdd(onDone) {
         <input type="number" class="manual-input" id="manual-pages" placeholder="0" min="0" />
       </div>
 
+      <div style="display:grid;grid-template-columns:1fr 72px;gap:12px;align-items:end;">
+        <div>
+          <div class="sheet-section-label">Series</div>
+          <input type="text" class="manual-input" id="manual-series" placeholder="Series name…" autocomplete="off" />
+        </div>
+        <div>
+          <div class="sheet-section-label">Book #</div>
+          <input type="text" class="manual-input" id="manual-series-num" placeholder="1" autocomplete="off" />
+        </div>
+      </div>
+
       <div>
         <div class="sheet-section-label">Description</div>
         <textarea class="notes-textarea" id="manual-desc" placeholder="Short description…" style="min-height:80px;"></textarea>
@@ -357,14 +372,16 @@ export function openManualAdd(onDone) {
       sheet.querySelector('#manual-title').classList.add('input-error')
       return
     }
-    const author      = sheet.querySelector('#manual-author').value.trim() || 'Unknown author'
-    const genre       = sheet.querySelector('#manual-genre').value.trim()
-    const published   = sheet.querySelector('#manual-published').value.trim()
-    const pages       = parseInt(sheet.querySelector('#manual-pages').value || '0', 10)
-    const description = sheet.querySelector('#manual-desc').value.trim()
-    const notes       = sheet.querySelector('#manual-notes').value.trim()
-    const progress    = parseInt(sheet.querySelector('#manual-progress')?.value || '0', 10)
-    const dateStr     = sheet.querySelector('#manual-date-completed')?.value
+    const author       = sheet.querySelector('#manual-author').value.trim() || 'Unknown author'
+    const genre        = sheet.querySelector('#manual-genre').value.trim()
+    const published    = sheet.querySelector('#manual-published').value.trim()
+    const pages        = parseInt(sheet.querySelector('#manual-pages').value || '0', 10)
+    const series       = sheet.querySelector('#manual-series').value.trim()
+    const seriesNumber = sheet.querySelector('#manual-series-num').value.trim()
+    const description  = sheet.querySelector('#manual-desc').value.trim()
+    const notes        = sheet.querySelector('#manual-notes').value.trim()
+    const progress     = parseInt(sheet.querySelector('#manual-progress')?.value || '0', 10)
+    const dateStr      = sheet.querySelector('#manual-date-completed')?.value
 
     const bookId = `manual_${Date.now()}`
 
@@ -379,15 +396,17 @@ export function openManualAdd(onDone) {
         description,
         dateReleased: published,
         genre,
+        series,
+        seriesNumber,
       })
 
-      const updates = { rating, notes, isBOTM, genre }
+      const updates = { rating, notes, isBOTM, genre, series, seriesNumber }
       if (selectedShelf === 'reading') updates.progress = progress
       if (selectedShelf === 'read' && dateStr) {
         updates.dateCompleted = new Date(dateStr + 'T12:00:00')
       }
 
-      if (rating || notes || isBOTM || genre || updates.dateCompleted) {
+      if (rating || notes || isBOTM || genre || series || seriesNumber || updates.dateCompleted) {
         await updateBook(bookId, updates)
       }
 
@@ -483,6 +502,20 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
       <div>
         <div class="sheet-section-label">Shelf</div>
         <div class="chips">${shelfChips}</div>
+      </div>
+
+      <!-- Series -->
+      <div style="display:grid;grid-template-columns:1fr 72px;gap:12px;align-items:end;">
+        <div>
+          <div class="sheet-section-label">Series</div>
+          <input type="text" class="manual-input" id="series-input"
+            value="${book.series || ''}" placeholder="Series name…" autocomplete="off" />
+        </div>
+        <div>
+          <div class="sheet-section-label">Book #</div>
+          <input type="text" class="manual-input" id="series-num-input"
+            value="${book.seriesNumber || ''}" placeholder="1" autocomplete="off" />
+        </div>
       </div>
 
       <!-- Progress (reading only) -->

@@ -1,6 +1,7 @@
 import { auth, signOutUser } from '../firebase.js'
 import { watchAllBooks, getBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
+import { backHandlerStack } from '../main.js'
 import { Chart, registerables } from 'chart.js'
 
 Chart.register(...registerables)
@@ -50,7 +51,13 @@ export function renderProfile(container) {
   container.querySelector('#sign-out-btn').addEventListener('click', () => signOutUser())
   initCalendar(container)
 
+  let allBooks = []
+  container.querySelector('#year-review-btn').addEventListener('click', () => {
+    openYearInReview(allBooks)
+  })
+
   const unsub = watchAllBooks(books => {
+    allBooks = books
     calendarBooks = books.filter(b => b.shelf === 'read' && b.dateCompleted)
     updateStats(container, books)
     buildCharts(container, books)
@@ -441,6 +448,167 @@ function renderCalendarGrid(container) {
   })
 }
 
+// ── Year in Review ────────────────────────────────────────────────────────────
+
+function openYearInReview(books) {
+  let year = new Date().getFullYear()
+
+  const scrim = document.createElement('div')
+  scrim.className = 'sheet-scrim'
+  const sheet = document.createElement('div')
+  sheet.className = 'bottom-sheet'
+  document.body.appendChild(scrim)
+  document.body.appendChild(sheet)
+
+  function render() {
+    const readThisYear = books.filter(b =>
+      b.shelf === 'read' && b.dateCompleted &&
+      b.dateCompleted.getFullYear() === year
+    )
+
+    const bookCount   = readThisYear.length
+    const pageCount   = readThisYear.reduce((s, b) => s + (b.pageCount || 0), 0)
+    const rated       = readThisYear.filter(b => b.rating > 0)
+    const avgRating   = rated.length
+      ? (rated.reduce((s, b) => s + b.rating, 0) / rated.length).toFixed(1)
+      : null
+
+    // Top genre
+    const genreMap = new Map()
+    readThisYear.forEach(b => { if (b.genre) genreMap.set(b.genre, (genreMap.get(b.genre) || 0) + 1) })
+    const topGenre = Array.from(genreMap.entries()).sort((a, b) => b[1] - a[1])[0]
+
+    // Top author
+    const authorMap = new Map()
+    readThisYear.forEach(b => { if (b.author) authorMap.set(b.author, (authorMap.get(b.author) || 0) + 1) })
+    const topAuthor = Array.from(authorMap.entries()).sort((a, b) => b[1] - a[1])[0]
+
+    // Best rated book (highest rating, most recent as tiebreaker)
+    const bestBook = rated.length
+      ? [...rated].sort((a, b) =>
+          b.rating !== a.rating
+            ? b.rating - a.rating
+            : (b.dateCompleted?.getTime?.() ?? 0) - (a.dateCompleted?.getTime?.() ?? 0)
+        )[0]
+      : null
+
+    const starsHTML = n => '★'.repeat(n) + '☆'.repeat(5 - n)
+
+    sheet.innerHTML = `
+      <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
+      <div class="sheet-header" style="align-items:center;">
+        <div class="sheet-meta" style="flex:1;">
+          <div class="sheet-title" style="font-size:1.1rem;">Year in Review</div>
+        </div>
+        <button class="icon-btn" id="yir-close">
+          <span class="material-symbols-rounded">close</span>
+        </button>
+      </div>
+      <div class="sheet-body">
+
+        <!-- Year selector -->
+        <div class="yir-year-nav">
+          <button class="icon-btn" id="yir-prev">
+            <span class="material-symbols-rounded">chevron_left</span>
+          </button>
+          <span class="yir-year-label">${year}</span>
+          <button class="icon-btn" id="yir-next">
+            <span class="material-symbols-rounded">chevron_right</span>
+          </button>
+        </div>
+
+        <!-- Review card -->
+        <div class="yir-card">
+          <div class="yir-card-header">
+            <span class="material-symbols-rounded yir-icon">auto_stories</span>
+            <span class="yir-card-year">${year}</span>
+          </div>
+
+          ${bookCount === 0 ? `
+            <div class="yir-empty">No books completed in ${year}</div>
+          ` : `
+            <div class="yir-hero">
+              <div class="yir-hero-num">${bookCount}</div>
+              <div class="yir-hero-label">book${bookCount !== 1 ? 's' : ''} finished</div>
+            </div>
+
+            <div class="yir-stats-row">
+              <div class="yir-stat">
+                <div class="yir-stat-num">${pageCount >= 1000 ? `${(pageCount/1000).toFixed(1)}k` : pageCount || '—'}</div>
+                <div class="yir-stat-label">pages</div>
+              </div>
+              <div class="yir-stat-divider"></div>
+              <div class="yir-stat">
+                <div class="yir-stat-num">${avgRating ? `${avgRating}★` : '—'}</div>
+                <div class="yir-stat-label">avg rating</div>
+              </div>
+            </div>
+
+            ${topGenre ? `
+            <div class="yir-detail-row">
+              <span class="yir-detail-label">Top Genre</span>
+              <span class="yir-detail-value">${topGenre[0]}</span>
+            </div>` : ''}
+
+            ${topAuthor ? `
+            <div class="yir-detail-row">
+              <span class="yir-detail-label">Top Author</span>
+              <span class="yir-detail-value">${topAuthor[0]}</span>
+            </div>` : ''}
+
+            ${bestBook ? `
+            <div class="yir-best-book">
+              <div class="yir-best-label">Favourite read</div>
+              <div class="yir-best-title">${bestBook.title}</div>
+              <div class="yir-best-author">${bestBook.author}</div>
+              <div class="yir-best-stars">${starsHTML(bestBook.rating)}</div>
+            </div>` : ''}
+          `}
+
+          <div class="yir-footer">shlvd</div>
+        </div>
+
+      </div>
+    `
+
+    sheet.querySelector('#yir-close').addEventListener('click', () => closeSheet('manual'))
+    sheet.querySelector('#yir-prev').addEventListener('click', () => { year--; render() })
+    sheet.querySelector('#yir-next').addEventListener('click', () => { year++; render() })
+  }
+
+  history.pushState({ sheet: true }, '')
+
+  function closeSheet(source) {
+    const idx = backHandlerStack.indexOf(closeSheet)
+    if (idx !== -1) backHandlerStack.splice(idx, 1)
+    if (source !== 'popstate') history.back()
+    scrim.classList.add('closing')
+    sheet.classList.add('closing')
+    setTimeout(() => { scrim.remove(); sheet.remove() }, 300)
+  }
+
+  backHandlerStack.push(closeSheet)
+  scrim.addEventListener('click', () => closeSheet('manual'))
+
+  let dragStartY = 0, dragging = false
+  sheet.addEventListener('touchstart', e => {
+    dragStartY = e.touches[0].clientY; dragging = true; sheet.style.transition = 'none'
+  }, { passive: true })
+  sheet.addEventListener('touchmove', e => {
+    if (!dragging) return
+    const dy = e.touches[0].clientY - dragStartY
+    if (dy > 0) sheet.style.transform = `translateY(${dy}px)`
+  }, { passive: true })
+  sheet.addEventListener('touchend', e => {
+    if (!dragging) return
+    dragging = false; sheet.style.transition = ''
+    if (e.changedTouches[0].clientY - dragStartY > 120) closeSheet('manual')
+    else sheet.style.transform = ''
+  }, { passive: true })
+
+  render()
+}
+
 // ── HTML ──────────────────────────────────────────────────────────────────────
 
 function buildHTML(user) {
@@ -531,6 +699,10 @@ function buildHTML(user) {
       </div>
 
       <div class="profile-actions">
+        <button class="btn btn-tonal" id="year-review-btn" style="width:100%; height:48px;">
+          <span class="material-symbols-rounded">auto_stories</span>
+          Year in Review
+        </button>
         <button class="btn btn-outlined" id="sign-out-btn" style="width:100%; height:48px;">
           <span class="material-symbols-rounded">logout</span>
           Sign out
