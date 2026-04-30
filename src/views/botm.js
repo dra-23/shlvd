@@ -507,6 +507,7 @@ function botmCardHTML(book) {
         ${starHTML(book.rating)}
         ${book.genre ? `<div class="botm-genre">${book.genre}</div>` : ''}
       </div>
+      ${book.isBOTY ? `<span class="material-symbols-rounded botm-boty-icon">emoji_events</span>` : ''}
       <span class="material-symbols-rounded botm-chevron">chevron_right</span>
     </div>
   `

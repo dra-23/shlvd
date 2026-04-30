@@ -1555,6 +1555,13 @@ html, body {
   font-size: 20px;
 }
 
+.botm-boty-icon {
+  font-size: 20px;
+  color: #5c6bc0;
+  flex-shrink: 0;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
 
 /* ── Expanded Read Section ───────────────────────────── */
 .read-expanded {
