@@ -77,8 +77,9 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
   setStars(rating)
   stars.forEach((s, i) => s.addEventListener('click', () => setStars(rating === i + 1 ? 0 : i + 1)))
 
-  // ── BotM toggle (auto-saves if book already on shelf) ────
+  // ── BotM / BOTY toggles ───────────────────────────────
   const botmBtn = sheet.querySelector('#botm-btn')
+  const botyBtn = sheet.querySelector('#boty-btn')
   const applyBotmUI = (val) => {
     botmBtn.classList.toggle('active', val)
     botmBtn.querySelector('.material-symbols-rounded').style.fontVariationSettings =
@@ -88,6 +89,12 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
   botmBtn.addEventListener('click', async () => {
     isBOTM = !isBOTM
     applyBotmUI(isBOTM)
+    // Show/hide BOTY button based on BotM state
+    botyBtn.style.display = isBOTM ? 'flex' : 'none'
+    if (!isBOTM && isBOTY) {
+      isBOTY = false
+      applyBotyUI(false)
+    }
     if (existingShelf) {
       try {
         await updateBook(book.id || book.googleBooksId, { isBOTM })
@@ -99,7 +106,6 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
   })
 
   // ── BOTY toggle ───────────────────────────────────────
-  const botyBtn = sheet.querySelector('#boty-btn')
   const applyBotyUI = (val) => {
     botyBtn.classList.toggle('active', val)
     botyBtn.querySelector('.material-symbols-rounded').style.fontVariationSettings =
@@ -611,8 +617,9 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
         Book of the Month
       </button>
 
-      <!-- BOTY toggle -->
-      <button class="botm-toggle-btn boty-toggle-btn" id="boty-btn">
+      <!-- BOTY toggle — only visible when BotM is active -->
+      <button class="botm-toggle-btn boty-toggle-btn" id="boty-btn"
+        style="display:${book.isBOTM ? 'flex' : 'none'}">
         <span class="material-symbols-rounded">emoji_events</span>
         Book of the Year
       </button>
