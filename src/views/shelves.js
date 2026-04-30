@@ -352,9 +352,13 @@ function bookCardHTML(book, shelf) {
     ? `<div class="botm-badge"><span class="material-symbols-rounded">workspace_premium</span></div>`
     : ''
 
+  const botyBadge = book.isBOTY
+    ? `<div class="boty-badge"><span class="material-symbols-rounded">emoji_events</span></div>`
+    : ''
+
   return `
     <div class="book-card">
-      <div class="book-cover">${coverHTML}${botmBadge}</div>
+      <div class="book-cover">${coverHTML}${botmBadge}${botyBadge}</div>
       <div class="book-card-info">
         <div class="book-card-title">${book.title}</div>
         <div class="book-card-author">${book.author}</div>

@@ -1,4 +1,14 @@
-import { addBook, updateBook, removeBook } from '../db.js'
+import { addBook, updateBook, removeBook, setBOTY, getSeriesList } from '../db.js'
+
+// Cached series list for autocomplete — invalidated on every save
+let _seriesCache = null
+async function populateSeriesDatalist(sheet) {
+  if (!_seriesCache) {
+    try { _seriesCache = await getSeriesList() } catch { _seriesCache = [] }
+  }
+  const list = sheet.querySelector('#series-datalist')
+  if (list) list.innerHTML = _seriesCache.map(s => `<option value="${s}">`).join('')
+}
 import { showSnackbar } from './shelves.js'
 import { backHandlerStack } from '../main.js'
 
@@ -37,6 +47,13 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
   let selectedShelf = existingShelf || 'want'
   let rating = book.rating || 0
   let isBOTM = book.isBOTM || false
+  let isBOTY = book.isBOTY || false
+  const botyYear = book.dateCompleted
+    ? new Date(book.dateCompleted).getFullYear()
+    : new Date().getFullYear()
+
+  // Populate series autocomplete asynchronously
+  populateSeriesDatalist(sheet)
 
   // ── Shelf chips ───────────────────────────────────────
   sheet.querySelectorAll('.shelf-chip').forEach(chip => {
@@ -81,6 +98,30 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
     }
   })
 
+  // ── BOTY toggle ───────────────────────────────────────
+  const botyBtn = sheet.querySelector('#boty-btn')
+  const applyBotyUI = (val) => {
+    botyBtn.classList.toggle('active', val)
+    botyBtn.querySelector('.material-symbols-rounded').style.fontVariationSettings =
+      val ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24" : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+  }
+  applyBotyUI(isBOTY)
+  botyBtn.addEventListener('click', async () => {
+    isBOTY = !isBOTY
+    applyBotyUI(isBOTY)
+    if (existingShelf) {
+      try {
+        if (isBOTY) {
+          await setBOTY(book.id || book.googleBooksId, botyYear)
+          showSnackbar(`🏆 Book of ${botyYear}!`)
+        } else {
+          await updateBook(book.id || book.googleBooksId, { isBOTY: false, botyYear: null })
+          showSnackbar('Book of the Year removed')
+        }
+      } catch (err) { console.error('BOTY error:', err) }
+    }
+  })
+
   // ── Description expand ────────────────────────────────
   const descEl = sheet.querySelector('#description-text')
   const descBtn = sheet.querySelector('#desc-toggle')
@@ -100,10 +141,9 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
     const seriesNumber = sheet.querySelector('#series-num-input')?.value.trim() || ''
     const dateStr      = sheet.querySelector('#date-completed-input')?.value
 
-    const updates = { shelf: selectedShelf, rating, notes, isBOTM, genre, series, seriesNumber }
+    const updates = { shelf: selectedShelf, rating, notes, isBOTM, isBOTY, genre, series, seriesNumber }
     if (selectedShelf === 'reading') updates.progress = progress
     if (selectedShelf === 'read') {
-      // Use the entered date, or fall back to today so pace stats always have a date
       updates.dateCompleted = dateStr
         ? new Date(dateStr + 'T12:00:00')
         : new Date()
@@ -124,14 +164,17 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
           series,
           seriesNumber,
         })
-        if (rating || notes || isBOTM || genre || series || seriesNumber || updates.dateCompleted) {
+        if (rating || notes || isBOTM || isBOTY || genre || series || seriesNumber || updates.dateCompleted) {
           await updateBook(book.googleBooksId, updates)
         }
+        if (isBOTY) await setBOTY(book.googleBooksId, botyYear)
         showSnackbar(`Added to ${SHELF_LABELS[selectedShelf]}`)
       } else {
         await updateBook(book.id || book.googleBooksId, updates)
+        if (isBOTY) await setBOTY(book.id || book.googleBooksId, botyYear)
         showSnackbar('Updated')
       }
+      _seriesCache = null // invalidate so next open reflects new series names
       closeSheet('manual')
       onDone?.()
     } catch (err) {
@@ -251,10 +294,12 @@ export function openManualAdd(onDone) {
         <input type="number" class="manual-input" id="manual-pages" placeholder="0" min="0" />
       </div>
 
+      <datalist id="series-datalist"></datalist>
       <div style="display:grid;grid-template-columns:1fr 72px;gap:12px;align-items:end;">
         <div>
           <div class="sheet-section-label">Series</div>
-          <input type="text" class="manual-input" id="manual-series" placeholder="Series name…" autocomplete="off" />
+          <input type="text" class="manual-input" id="manual-series"
+            list="series-datalist" placeholder="Series name…" autocomplete="off" />
         </div>
         <div>
           <div class="sheet-section-label">Book #</div>
@@ -328,6 +373,8 @@ export function openManualAdd(onDone) {
 
   document.body.appendChild(scrim)
   document.body.appendChild(sheet)
+
+  populateSeriesDatalist(sheet)
 
   // ── State ──────────────────────────────────────────────
   let selectedShelf = 'want'
@@ -410,6 +457,7 @@ export function openManualAdd(onDone) {
         await updateBook(bookId, updates)
       }
 
+      _seriesCache = null
       showSnackbar(`Added to ${SHELF_LABELS[selectedShelf]}`)
       closeSheet('manual')
       onDone?.()
@@ -505,10 +553,12 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
       </div>
 
       <!-- Series -->
+      <datalist id="series-datalist"></datalist>
       <div style="display:grid;grid-template-columns:1fr 72px;gap:12px;align-items:end;">
         <div>
           <div class="sheet-section-label">Series</div>
           <input type="text" class="manual-input" id="series-input"
+            list="series-datalist"
             value="${book.series || ''}" placeholder="Series name…" autocomplete="off" />
         </div>
         <div>
@@ -559,6 +609,12 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
       <button class="botm-toggle-btn" id="botm-btn">
         <span class="material-symbols-rounded">workspace_premium</span>
         Book of the Month
+      </button>
+
+      <!-- BOTY toggle -->
+      <button class="botm-toggle-btn boty-toggle-btn" id="boty-btn">
+        <span class="material-symbols-rounded">emoji_events</span>
+        Book of the Year
       </button>
 
       <!-- Notes -->

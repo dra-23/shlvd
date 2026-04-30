@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -36,6 +37,8 @@ function normalize(id, d) {
     rating:        d.rating       || 0,
     notes:         d.review       || '',
     isBOTM:        d.isBOTM       || false,
+    isBOTY:        d.isBOTY       || false,
+    botyYear:      d.botyYear     || null,
     genre:         d.genre        || '',
     description:   d.description  || '',
     dateReleased:  d.dateReleased  || '',
@@ -89,6 +92,8 @@ export const updateBook = async (id, updates) => {
   if ('notes'         in updates) dbUpdates.review        = updates.notes
   if ('progress'      in updates) dbUpdates.progress      = updates.progress
   if ('isBOTM'        in updates) dbUpdates.isBOTM        = updates.isBOTM
+  if ('isBOTY'        in updates) dbUpdates.isBOTY        = updates.isBOTY
+  if ('botyYear'      in updates) dbUpdates.botyYear      = updates.botyYear
   if ('genre'         in updates) dbUpdates.genre         = updates.genre
   if ('series'        in updates) dbUpdates.series        = updates.series
   if ('seriesNumber'  in updates) dbUpdates.seriesNumber  = updates.seriesNumber
@@ -128,6 +133,27 @@ export const watchBotm = (callback) => {
       .sort((a, b) => (b.dateCompleted?.getTime?.() ?? 0) - (a.dateCompleted?.getTime?.() ?? 0))
     callback(books)
   })
+}
+
+/** Set Book of the Year — clears any existing BOTY for the same year first */
+export const setBOTY = async (bookId, year) => {
+  const snap = await getDocs(query(booksCol(), where('isBOTY', '==', true)))
+  await Promise.all(
+    snap.docs
+      .filter(d => d.data().botyYear === year && d.id !== bookId)
+      .map(d => updateDoc(d.ref, { isBOTY: false, botyYear: null }))
+  )
+  if (bookId) {
+    await updateDoc(doc(booksCol(), bookId), { isBOTY: true, botyYear: year })
+  }
+}
+
+/** Return sorted list of unique series names across all books */
+export const getSeriesList = async () => {
+  const snap = await getDocs(booksCol())
+  const set = new Set()
+  snap.docs.forEach(d => { if (d.data().series) set.add(d.data().series) })
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
 }
 
 /** Real-time listener for all books (used for stats) */
