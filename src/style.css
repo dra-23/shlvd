@@ -1556,9 +1556,18 @@ html, body {
 }
 
 .botm-boty-icon {
-  font-size: 20px;
+  font-size: 26px;
   color: #5c6bc0;
   flex-shrink: 0;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.botm-detail-boty-icon {
+  font-size: 32px;
+  color: #5c6bc0;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 

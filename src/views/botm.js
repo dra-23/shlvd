@@ -229,6 +229,7 @@ function buildPageHTML(book, monthLabel, monthBooks) {
           ${dateDisplay ? `<div class="botm-page-book-meta">Completed ${dateDisplay}</div>` : ''}
           ${book.rating ? `<div style="margin-top:6px;">${starHTML(book.rating)}</div>` : ''}
         </div>
+        ${book.isBOTY ? `<span class="material-symbols-rounded botm-detail-boty-icon">emoji_events</span>` : ''}
       </div>
 
       ${book.notes ? `
