@@ -34,27 +34,31 @@ function toDate(ts) {
   return null
 }
 
+// Spreadsheet-imported books store some text fields as numbers
+// (e.g. dateReleased: 2024, title: 1984) — always hand the UI strings
+const text = v => (v === null || v === undefined) ? '' : String(v)
+
 // Map existing DB fields → shlvd internal format
 function normalize(id, d) {
   return {
     id,
     googleBooksId: id,
-    title:         d.title        || '',
-    author:        d.author       || '',
+    title:         text(d.title),
+    author:        text(d.author),
     thumbnail:     d.cover        || '',
     pageCount:     d.pages        || 0,
     shelf:         normalizeStatus(d.status),
     progress:      d.progress     || 0,
     rating:        d.rating       || 0,
-    notes:         d.review       || '',
+    notes:         text(d.review),
     isBOTM:        d.isBOTM       || false,
     isBOTY:        d.isBOTY       || false,
     botyYear:      d.botyYear     || null,
-    genre:         d.genre        || '',
-    description:   d.description  || '',
-    dateReleased:  d.dateReleased  || '',
-    series:        d.series        || '',
-    seriesNumber:  d.seriesNumber  || '',
+    genre:         text(d.genre),
+    description:   text(d.description),
+    dateReleased:  text(d.dateReleased),
+    series:        text(d.series),
+    seriesNumber:  text(d.seriesNumber),
     dateCompleted: toDate(d.dateCompleted),
     addedAt:       toDate(d.addedAt) || toDate(d.dateCompleted),
   }
@@ -62,7 +66,7 @@ function normalize(id, d) {
 
 function normalizeStatus(status) {
   if (!status) return 'want'
-  const s = status.toLowerCase()
+  const s = String(status).toLowerCase()
   if (s === 'read') return 'read'
   if (s === 'reading' || s === 'currentlyreading') return 'reading'
   if (s === 'dnf') return 'dnf'
@@ -172,7 +176,7 @@ export const setBOTY = async (bookId, year) => {
 export const getSeriesList = async () => {
   const snap = await getDocs(booksCol())
   const set = new Set()
-  snap.docs.forEach(d => { if (d.data().series) set.add(d.data().series) })
+  snap.docs.forEach(d => { if (d.data().series) set.add(text(d.data().series)) })
   return Array.from(set).sort((a, b) => a.localeCompare(b))
 }
 
