@@ -36,8 +36,13 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
   scrim.className = 'sheet-scrim'
 
   const sheet = document.createElement('div')
-  sheet.className = 'bottom-sheet'
+  sheet.className = 'bottom-sheet book-detail-sheet'
   sheet.innerHTML = buildSheetHTML(book, existingShelf, extraHTML)
+  // Blurred cover behind the header (set here rather than in the template
+  // so the URL never has to survive HTML + CSS escaping)
+  if (book.thumbnail) {
+    sheet.querySelector('.bd-hero').style.setProperty('--cover', `url(${JSON.stringify(book.thumbnail)})`)
+  }
 
   document.body.appendChild(scrim)
   document.body.appendChild(sheet)
@@ -71,12 +76,27 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
 
   // ── Star rating ───────────────────────────────────────
   const stars = sheet.querySelectorAll('.star-btn')
+  const ratingLabel = sheet.querySelector('#rating-label')
+  const RATING_WORDS = ['Tap to rate', 'Not for me', 'It was OK', 'Liked it', 'Really liked it', 'Loved it']
   const setStars = n => {
     rating = n
     stars.forEach((s, i) => s.classList.toggle('filled', i < n))
+    ratingLabel.textContent = RATING_WORDS[n]
   }
   setStars(rating)
   stars.forEach((s, i) => s.addEventListener('click', () => setStars(rating === i + 1 ? 0 : i + 1)))
+
+  // ── Progress bar follows the page input ──────────────
+  const progressInput = sheet.querySelector('#progress-input')
+  const progressFill  = sheet.querySelector('#progress-fill')
+  const progressPct   = sheet.querySelector('#progress-pct')
+  if (progressInput && progressFill && book.pageCount) {
+    progressInput.addEventListener('input', () => {
+      const p = Math.max(0, Math.min(100, Math.round((Number(progressInput.value) || 0) / book.pageCount * 100)))
+      progressFill.style.width = `${p}%`
+      progressPct.textContent = `${p}%`
+    })
+  }
 
   // ── BotM / BOTY toggles ───────────────────────────────
   const botmBtn = sheet.querySelector('#botm-btn')
@@ -133,6 +153,10 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
   const descEl = sheet.querySelector('#description-text')
   const descBtn = sheet.querySelector('#desc-toggle')
   if (descEl && descBtn) {
+    // Short descriptions fit without clamping — no need for the toggle
+    requestAnimationFrame(() => {
+      if (descEl.scrollHeight <= descEl.clientHeight + 2) descBtn.remove()
+    })
     descBtn.addEventListener('click', () => {
       const expanded = descEl.classList.toggle('expanded')
       descBtn.textContent = expanded ? 'Show less' : 'Show more'
@@ -524,81 +548,60 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
          <span class="material-symbols-rounded">menu_book</span>
        </div>`
 
-  const shelfChips = Object.entries(SHELF_LABELS).map(([id, label]) => `
-    <button class="chip shelf-chip ${existingShelf === id ? 'selected' : ''}" data-shelf="${id}">${label}</button>
-  `).join('')
-
   const hasDescription = book.description && book.description !== 'No description available.'
+  const released = book.dateReleased || book.publishedDate || ''
+  const year = released.match(/\d{4}/)?.[0]
+  const pct = book.pageCount ? Math.min(100, Math.round(((book.progress || 0) / book.pageCount) * 100)) : 0
 
-  return `
-    <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
+  // ── Header ──────────────────────────────────────────
+  const facts = [
+    book.pageCount > 0 && fact('menu_book', `${book.pageCount} pages`),
+    year && fact('calendar_today', year),
+    book.series && fact('collections_bookmark',
+      `${esc(book.series)}${book.seriesNumber ? ` #${esc(book.seriesNumber)}` : ''}`),
+  ].filter(Boolean).join('')
 
-    <div class="sheet-header">
-      <div class="sheet-cover">${coverHTML}</div>
-      <div class="sheet-meta">
-        <div class="sheet-title">${esc(book.title)}</div>
-        <div class="sheet-author">${esc(book.author)}</div>
-        <input type="text" class="genre-meta-input" id="genre-input"
-          value="${esc(book.genre || book.categories?.[0])}" placeholder="Add genre…" />
-        ${book.pageCount > 0 ? `<div class="body-small" style="color:var(--md-on-surface-variant);margin-top:2px;">${book.pageCount} pages</div>` : ''}
-        ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant);">Published ${esc(book.dateReleased)}</div>` : ''}
-      </div>
-      <button class="icon-btn" id="close-btn">
-        <span class="material-symbols-rounded">close</span>
-      </button>
-    </div>
+  const statusPills = existingShelf ? [
+    `<span class="bd-pill">${statusText(book, existingShelf, pct)}</span>`,
+    book.isBOTM && `<span class="bd-pill bd-pill-botm"><span class="material-symbols-rounded">workspace_premium</span>BotM</span>`,
+    book.isBOTY && `<span class="bd-pill bd-pill-boty"><span class="material-symbols-rounded">emoji_events</span>Book of ${book.botyYear || 'the Year'}</span>`,
+  ].filter(Boolean).join('') : ''
 
-    <div class="sheet-body">
+  // ── Sections ────────────────────────────────────────
+  const aboutCard = hasDescription ? `
+    <section class="bd-card">
+      ${cardTitle('auto_stories', 'About this book')}
+      <div class="description-text" id="description-text">${safeHTML(book.description)}</div>
+      <button class="btn btn-text bd-more" id="desc-toggle">Show more</button>
+    </section>` : ''
 
-      ${hasDescription ? `
-      <!-- Description -->
-      <div>
-        <div class="sheet-section-label">Description</div>
-        <div class="description-text" id="description-text">${safeHTML(book.description)}</div>
-        <button class="btn btn-text" id="desc-toggle" style="padding:4px 0;margin-top:4px;">Show more</button>
-      </div>
-      ` : ''}
+  const readingCard = `
+    <section class="bd-card">
+      ${cardTitle('bookmark', 'Your reading')}
 
-      <!-- Shelf -->
-      <div>
-        <div class="sheet-section-label">Shelf</div>
-        <div class="chips">${shelfChips}</div>
-      </div>
-
-      <!-- Series -->
-      <datalist id="series-datalist"></datalist>
-      <div style="display:grid;grid-template-columns:1fr 72px;gap:12px;align-items:end;">
-        <div>
-          <div class="sheet-section-label">Series</div>
-          <input type="text" class="manual-input" id="series-input"
-            list="series-datalist"
-            value="${esc(book.series)}" placeholder="Series name…" autocomplete="off" />
-        </div>
-        <div>
-          <div class="sheet-section-label">Book #</div>
-          <input type="text" class="manual-input" id="series-num-input"
-            value="${esc(book.seriesNumber)}" placeholder="1" autocomplete="off" />
-        </div>
+      <div class="bd-label">Shelf</div>
+      <div class="bd-segmented" role="group" aria-label="Shelf">
+        ${Object.entries(SHELF_LABELS).map(([id, label]) => `
+          <button class="shelf-chip ${(existingShelf || 'want') === id ? 'selected' : ''}" data-shelf="${id}">${label}</button>
+        `).join('')}
       </div>
 
-      <!-- Progress (reading only) -->
       <div id="progress-section" style="display:${existingShelf === 'reading' ? 'block' : 'none'}">
-        <div class="sheet-section-label">Progress</div>
-        <div class="progress-row">
+        <div class="bd-label">Progress</div>
+        <div class="bd-progress">
           <div class="progress-input-wrap">
-            <span class="material-symbols-rounded" style="font-size:20px;color:var(--md-on-surface-variant)">bookmark</span>
-            <input type="number" class="progress-num-input" id="progress-input"
-              min="0" max="${book.pageCount || 9999}"
-              value="${book.progress || 0}" placeholder="0" />
-            <span class="progress-sep">/</span>
-            <span class="progress-total">${book.pageCount ? `${book.pageCount} pp` : '—'}</span>
+            <input type="number" class="progress-num-input" id="progress-input" inputmode="numeric"
+              min="0" max="${book.pageCount || 9999}" value="${book.progress || 0}" placeholder="0" aria-label="Current page" />
+            <span class="progress-sep">of</span>
+            <span class="progress-total">${book.pageCount ? `${book.pageCount} pages` : '—'}</span>
           </div>
+          <span class="bd-progress-pct" id="progress-pct">${book.pageCount ? `${pct}%` : ''}</span>
         </div>
+        ${book.pageCount ? `<div class="bd-progress-bar"><div class="bd-progress-fill" id="progress-fill" style="width:${pct}%"></div></div>` : ''}
       </div>
 
-      <!-- Date Completed (read only) -->
       <div id="date-completed-section" style="display:${existingShelf === 'read' ? 'block' : 'none'}">
-        <div class="sheet-section-label">Date Completed</div>
+        <div class="bd-label">Finished on</div>
         <div class="date-input-wrap">
           <input type="date" class="date-input" id="date-completed-input"
             value="${tsToDateInput(book.dateCompleted)}" />
@@ -606,52 +609,140 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
         </div>
       </div>
 
-      <!-- Rating -->
-      <div>
-        <div class="sheet-section-label">Rating</div>
+      <div class="bd-label">Rating</div>
+      <div class="bd-rating">
         <div class="star-rating">
-          ${[1,2,3,4,5].map(n => `
-            <button class="star-btn" data-star="${n}">
+          ${[1, 2, 3, 4, 5].map(n => `
+            <button class="star-btn" data-star="${n}" aria-label="${n} star${n > 1 ? 's' : ''}">
               <span class="material-symbols-rounded">star</span>
             </button>
           `).join('')}
         </div>
+        <span class="bd-rating-label" id="rating-label"></span>
       </div>
+    </section>`
 
-      <!-- BotM toggle -->
-      <button class="botm-toggle-btn" id="botm-btn">
+  const notesCard = `
+    <section class="bd-card">
+      ${cardTitle('edit_note', 'Notes')}
+      <textarea class="notes-textarea" id="notes-input"
+        placeholder="What did you think? Favourite moments, quotes…">${esc(book.notes)}</textarea>
+    </section>`
+
+  const detailsCard = `
+    <section class="bd-card">
+      ${cardTitle('info', 'Details')}
+      <datalist id="series-datalist"></datalist>
+      <div class="bd-rows">
+        <label class="bd-row">
+          <span class="bd-row-label">Genre</span>
+          <input type="text" class="bd-row-input" id="genre-input"
+            value="${esc(book.genre || book.categories?.[0])}" placeholder="Add genre" autocomplete="off" />
+        </label>
+        <label class="bd-row">
+          <span class="bd-row-label">Series</span>
+          <input type="text" class="bd-row-input" id="series-input" list="series-datalist"
+            value="${esc(book.series)}" placeholder="Add series" autocomplete="off" />
+        </label>
+        <label class="bd-row">
+          <span class="bd-row-label">Book #</span>
+          <input type="text" class="bd-row-input" id="series-num-input" inputmode="numeric"
+            value="${esc(book.seriesNumber)}" placeholder="—" autocomplete="off" />
+        </label>
+        ${released ? `
+        <div class="bd-row">
+          <span class="bd-row-label">Published</span>
+          <span class="bd-row-value">${esc(formatReleased(released))}</span>
+        </div>` : ''}
+        ${book.addedAt ? `
+        <div class="bd-row">
+          <span class="bd-row-label">Added</span>
+          <span class="bd-row-value">${formatDisplayDate(book.addedAt)}</span>
+        </div>` : ''}
+      </div>
+    </section>`
+
+  const recognitionCard = `
+    <section class="bd-card">
+      ${cardTitle('military_tech', 'Recognition')}
+      <button class="botm-toggle-btn bd-toggle" id="botm-btn">
         <span class="material-symbols-rounded">workspace_premium</span>
-        Book of the Month
+        <span class="bd-toggle-text">
+          <span class="bd-toggle-title">Book of the Month</span>
+          <span class="bd-toggle-sub">Feature it on the BotM page</span>
+        </span>
+        <span class="material-symbols-rounded bd-toggle-check">check_circle</span>
       </button>
-
-      <!-- BOTY toggle — only visible when BotM is active -->
-      <button class="botm-toggle-btn boty-toggle-btn" id="boty-btn"
+      <!-- Only offered once the book is a BotM -->
+      <button class="botm-toggle-btn boty-toggle-btn bd-toggle" id="boty-btn"
         style="display:${book.isBOTM ? 'flex' : 'none'}">
         <span class="material-symbols-rounded">emoji_events</span>
-        Book of the Year
+        <span class="bd-toggle-text">
+          <span class="bd-toggle-title">Book of the Year</span>
+          <span class="bd-toggle-sub">Your top pick of the year</span>
+        </span>
+        <span class="material-symbols-rounded bd-toggle-check">check_circle</span>
       </button>
+    </section>`
 
-      <!-- Notes -->
-      <div>
-        <div class="sheet-section-label">Notes</div>
-        <textarea class="notes-textarea" id="notes-input"
-          placeholder="Your thoughts…">${esc(book.notes)}</textarea>
+  return `
+    <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
+    <button class="icon-btn bd-close" id="close-btn" aria-label="Close">
+      <span class="material-symbols-rounded">close</span>
+    </button>
+
+    <header class="bd-hero">
+      <div class="bd-cover">${coverHTML}</div>
+      <div class="bd-hero-text">
+        <h2 class="bd-title">${esc(book.title)}</h2>
+        <div class="bd-author">${esc(book.author)}</div>
+        ${facts ? `<div class="bd-facts">${facts}</div>` : ''}
+        ${statusPills ? `<div class="bd-pills">${statusPills}</div>` : ''}
       </div>
+    </header>
 
-      <!-- Save -->
-      <button class="btn btn-filled" id="save-btn" style="width:100%;height:48px">
-        <span class="material-symbols-rounded">${existingShelf ? 'save' : 'add'}</span>
-        ${existingShelf ? 'Save changes' : 'Add to shelf'}
-      </button>
+    <div class="bd-body">
+      ${existingShelf
+        ? readingCard + notesCard + aboutCard
+        : aboutCard + readingCard + notesCard}
+      ${detailsCard}
+      ${recognitionCard}
 
       ${existingShelf ? `
-      <button class="btn btn-danger" id="remove-btn" style="width:100%">
+      <button class="btn btn-text bd-remove" id="remove-btn">
         <span class="material-symbols-rounded">delete</span>
         Remove from shelf
       </button>` : ''}
 
       ${extraHTML}
+    </div>
 
+    <div class="bd-footer">
+      <button class="btn btn-filled" id="save-btn">
+        <span class="material-symbols-rounded">${existingShelf ? 'check' : 'add'}</span>
+        ${existingShelf ? 'Save changes' : 'Add to shelf'}
+      </button>
     </div>
   `
+}
+
+function fact(icon, text) {
+  return `<span class="bd-fact"><span class="material-symbols-rounded">${icon}</span>${text}</span>`
+}
+
+function cardTitle(icon, text) {
+  return `<h3 class="bd-card-title"><span class="material-symbols-rounded">${icon}</span>${text}</h3>`
+}
+
+function statusText(book, shelf, pct) {
+  if (shelf === 'read' && book.dateCompleted)
+    return `Read · ${new Date(book.dateCompleted).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  if (shelf === 'reading' && book.pageCount) return `Reading · ${pct}%`
+  return SHELF_LABELS[shelf] || shelf
+}
+
+// "2017-06-14" → "June 14, 2017"; leaves "2017" or free text as-is
+function formatReleased(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  return formatDisplayDate(new Date(value + 'T12:00:00'))
 }
