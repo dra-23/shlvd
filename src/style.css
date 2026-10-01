@@ -194,12 +194,22 @@ html, body {
   /* Keep content below the status bar / notch (black-translucent + viewport-fit=cover) */
   padding-top: env(safe-area-inset-top, 0px);
   background: var(--md-background);
+  position: relative;
 }
 
 .view-container {
   flex: 1;
   overflow: hidden;
   position: relative;
+}
+
+/* The bottom nav floats over the content (so it can slide away), so every
+   scrolling area ends with room for it. --nav-h is measured in main.js. */
+.view-container :is(#shelves-content, #shelf-search-results, #search-results,
+  #botm-content, .botm-page-scroll, .shelf-panel, .profile-screen)::after {
+  content: '';
+  display: block;
+  height: var(--nav-h, 80px);
 }
 
 .view {
@@ -224,6 +234,11 @@ html, body {
 
 /* ── Bottom Navigation ───────────────────────────────── */
 .bottom-nav {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: transform var(--md-duration-medium) var(--md-motion-standard);
   display: flex;
   background: var(--md-background);
   /* Keep the padding to protect icons from the gesture line */
@@ -235,6 +250,13 @@ html, body {
      Even if Chrome forces a gap, it will be filled with this color 
      instead of white. */
   box-shadow: 0 100px 0 0 var(--md-background);
+}
+
+/* Slid out of view while scrolling down (see initNavAutoHide in main.js) */
+.bottom-nav.nav-hidden { transform: translateY(100%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-nav { transition: none; }
 }
 
 .nav-item {

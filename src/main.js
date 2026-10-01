@@ -78,6 +78,7 @@ function _navigateInternal(tab) {
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab)
   })
+  setNavHidden(false)
 
   swapView(tab)
 }
@@ -135,12 +136,55 @@ function renderShell() {
     if (btn) navigateTo(btn.dataset.tab)
   })
 
+  initNavAutoHide()
+
   // Mount initial view
   const container = document.getElementById('view-container')
   const initial = document.createElement('div')
   initial.className = 'view view--active'
   activeViewDestroy = mountView(activeTab, initial)
   container.appendChild(initial)
+}
+
+// ── Bottom nav auto-hide ─────────────────────────────────────────────────────
+
+function setNavHidden(hidden) {
+  document.getElementById('bottom-nav')?.classList.toggle('nav-hidden', hidden)
+}
+
+// Slide the nav away while scrolling down, bring it back when scrolling up
+// or near the top. Views have their own inner scroll areas, so listen in the
+// capture phase (scroll events don't bubble) and track each area separately.
+function initNavAutoHide() {
+  const nav = document.getElementById('bottom-nav')
+  const container = document.getElementById('view-container')
+
+  // Scroll areas reserve this much space at the end so nothing hides behind the nav
+  new ResizeObserver(() => {
+    nav.parentElement.style.setProperty('--nav-h', `${nav.offsetHeight}px`)
+  }).observe(nav)
+
+  const lastTop = new WeakMap()
+  let travel = 0 // distance scrolled in the current direction (+down / −up)
+  container.addEventListener('scroll', e => {
+    const el = e.target
+    if (!(el instanceof Element) || el.scrollHeight <= el.clientHeight) return // horizontal shelf rows
+
+    const top  = el.scrollTop
+    const prev = lastTop.get(el) ?? 0 // scroll areas start at the top
+    lastTop.set(el, top)
+
+    // Ignore iOS rubber-band bounce past either end
+    if (top < 0 || top + el.clientHeight > el.scrollHeight) return
+
+    const dy = top - prev
+    if (!dy) return
+    travel = Math.sign(dy) === Math.sign(travel) ? travel + dy : dy
+
+    if (top < 24)            setNavHidden(false)
+    else if (travel > 16)    setNavHidden(true)
+    else if (travel < -16)   setNavHidden(false)
+  }, { capture: true, passive: true })
 }
 
 function renderSignIn() {
