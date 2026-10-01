@@ -27,7 +27,20 @@ let activeViewDestroy = null
 // Back-gesture handler stack (sheets push onto this)
 export const backHandlerStack = []
 
+// A sheet/page closed by its own button pops the history entry it pushed.
+// That popstate must not be treated as a back gesture, or it would also
+// close whatever is underneath (e.g. the BotM page behind a book sheet).
+let ownBackPending = 0
+export function popOwnHistoryEntry() {
+  ownBackPending++
+  history.back()
+}
+
 window.addEventListener('popstate', (e) => {
+  if (ownBackPending > 0) {
+    ownBackPending--
+    return
+  }
   if (backHandlerStack.length > 0) {
     backHandlerStack.pop()('popstate')
   } else {

@@ -1,6 +1,7 @@
 import { esc } from '../escape.js'
 import { watchBotm, watchAllBooks } from '../db.js'
-import { backHandlerStack } from '../main.js'
+import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
+import { openBookDetail } from './book-detail.js'
 import { Chart, registerables } from 'chart.js'
 import { chartColors } from '../theme.js'
 
@@ -93,13 +94,15 @@ export function renderBotm(container) {
     }
 
     const groups = groupByYear(books)
+    // Same order as the cards on screen, so card i is botmBooks[i]
+    botmBooks = groups.flatMap(g => g.books)
     content.innerHTML = groups.map(({ year, books: yb }) => `
       <div class="botm-year-header">${year}</div>
       <div class="botm-list">${yb.map(botmCardHTML).join('')}</div>
     `).join('')
 
     content.querySelectorAll('.botm-card').forEach((card, i) => {
-      card.addEventListener('click', () => openBotmPage(books[i], container))
+      card.addEventListener('click', () => openBotmPage(i, container))
     })
   })
 
@@ -112,37 +115,73 @@ export function renderBotm(container) {
 
 // ── BotM detail page ──────────────────────────────────────────────────────────
 
-function openBotmPage(book, viewEl) {
-  const d     = book.dateCompleted
-  const year  = d ? d.getFullYear() : null
-  const month = d ? d.getMonth() : null
+// Picks in list order (newest first) — the month page steps through these
+let botmBooks = []
 
-  const monthBooks = d ? allReadBooks.filter(b => {
-    if (!b.dateCompleted) return false
-    return b.dateCompleted.getFullYear() === year && b.dateCompleted.getMonth() === month
-  }) : []
-
-  const monthLabel = d
-    ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    : ''
-
-  // Build page
+function openBotmPage(index, viewEl) {
   const page = document.createElement('div')
   page.className = 'botm-detail-page'
   page.style.transform = 'translateX(100%)'
-  page.innerHTML = buildPageHTML(book, monthLabel, monthBooks)
 
   // Append inside the .view so it's clipped by overflow-x:hidden during
   // the slide animation and automatically removed when navigating away
   viewEl.appendChild(page)
 
-  // Slide in + mount charts
+  let current = index
   let chartInstances = []
+
+  function render(direction = null) {
+    chartInstances.forEach(c => c?.destroy())
+    const book = botmBooks[current]
+    const monthBooks = booksReadInMonth(book.dateCompleted)
+    page.innerHTML = buildPageHTML(book, monthBooks, current)
+
+    if (book.thumbnail) {
+      page.querySelector('.bd-hero').style.setProperty('--cover', `url(${JSON.stringify(book.thumbnail)})`)
+    }
+    if (direction) {
+      page.querySelector('.botm-page-scroll').classList.add(direction === 'newer' ? 'botm-swap-newer' : 'botm-swap-older')
+    }
+
+    page.querySelector('.botm-back-btn').addEventListener('click', () => closePage('manual'))
+    page.querySelector('.botm-older-btn')?.addEventListener('click', () => step('older'))
+    page.querySelector('.botm-newer-btn')?.addEventListener('click', () => step('newer'))
+
+    const others = monthBooks.filter(b => b.id !== book.id)
+    page.querySelectorAll('.botm-also-item').forEach((el, i) => {
+      el.addEventListener('click', () => openBookDetail(others[i], 'read', () => render()))
+    })
+
+    requestAnimationFrame(() => { chartInstances = mountMonthCharts(page, monthBooks) })
+  }
+
+  // botmBooks is newest-first, so "older" moves forward through the list
+  function step(direction) {
+    const next = current + (direction === 'older' ? 1 : -1)
+    if (next < 0 || next >= botmBooks.length) return
+    current = next
+    render(direction)
+  }
+
+  render()
   requestAnimationFrame(() => {
     page.style.transition = 'transform 300ms cubic-bezier(0,0,0,1)'
     page.style.transform = 'translateX(0)'
-    chartInstances = mountMonthCharts(page, monthBooks)
   })
+
+  // Swipe left/right between picks (but let the cover strip scroll)
+  let touchX = 0, touchY = 0, tracking = false
+  page.addEventListener('touchstart', e => {
+    tracking = !e.target.closest('.botm-also-strip')
+    touchX = e.touches[0].clientX
+    touchY = e.touches[0].clientY
+  }, { passive: true })
+  page.addEventListener('touchend', e => {
+    if (!tracking) return
+    const dx = e.changedTouches[0].clientX - touchX
+    const dy = e.changedTouches[0].clientY - touchY
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2) step(dx < 0 ? 'newer' : 'older')
+  }, { passive: true })
 
   // Back handling
   history.pushState({ botmDetail: true }, '')
@@ -152,23 +191,40 @@ function openBotmPage(book, viewEl) {
     chartInstances = []
     const idx = backHandlerStack.indexOf(closePage)
     if (idx !== -1) backHandlerStack.splice(idx, 1)
-    if (source !== 'popstate') history.back()
+    if (source !== 'popstate') popOwnHistoryEntry()
     page.style.transition = 'transform 250ms cubic-bezier(0.3,0,1,1)'
     page.style.transform = 'translateX(100%)'
     setTimeout(() => page.remove(), 260)
   }
 
   backHandlerStack.push(closePage)
-  page.querySelector('.botm-back-btn')?.addEventListener('click', () => closePage('manual'))
+}
+
+function booksReadInMonth(date) {
+  if (!date) return []
+  return allReadBooks
+    .filter(b => b.dateCompleted &&
+      b.dateCompleted.getFullYear() === date.getFullYear() &&
+      b.dateCompleted.getMonth() === date.getMonth())
+    .sort((a, b) => a.dateCompleted - b.dateCompleted)
+}
+
+// "2017-06-14" → "June 14, 2017"; leaves "2017" or free text as-is
+function formatReleased(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  return new Date(value + 'T12:00:00')
+    .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
 // ── Page HTML ─────────────────────────────────────────────────────────────────
 
-function buildPageHTML(book, monthLabel, monthBooks) {
+function buildPageHTML(book, monthBooks, index) {
   const d     = book.dateCompleted
   const year  = d ? d.getFullYear() : null
   const month = d ? d.getMonth() : null
   const days  = d ? new Date(year, month + 1, 0).getDate() : 30
+  const monthLabel = d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Book of the Month'
+  const monthName  = d ? d.toLocaleDateString('en-US', { month: 'long' }) : 'this month'
 
   const count      = monthBooks.length
   const totalPages = monthBooks.filter(b => b.pageCount > 0).reduce((s, b) => s + b.pageCount, 0)
@@ -197,8 +253,7 @@ function buildPageHTML(book, monthLabel, monthBooks) {
   const hasRatings    = rated.length > 0
   const hasAuthors    = monthBooks.some(b => b.author)
   const hasGenres     = monthBooks.some(b => b.genre)
-  const genreCount    = monthBooks.filter(b => b.genre).length
-  const hasGenresBar  = genreCount >= 2
+  const hasGenresBar  = monthBooks.filter(b => b.genre).length >= 2
 
   const coverHTML = book.thumbnail
     ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" />`
@@ -206,100 +261,136 @@ function buildPageHTML(book, monthLabel, monthBooks) {
          <span class="material-symbols-rounded">menu_book</span>
        </div>`
 
-  const dateDisplay = d
-    ? d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-    : ''
+  const released = book.dateReleased || ''
+  const facts = [
+    book.pageCount > 0 && fact('menu_book', `${book.pageCount} pages`),
+    book.genre && fact('sell', esc(book.genre)),
+    released && fact('calendar_today', esc(released.match(/\d{4}/)?.[0] || released)),
+  ].filter(Boolean).join('')
+
+  const pills = [
+    d && `<span class="bd-pill"><span class="material-symbols-rounded">check_circle</span>Finished ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>`,
+    book.isBOTY && `<span class="bd-pill bd-pill-boty"><span class="material-symbols-rounded">emoji_events</span>Book of ${book.botyYear || year}</span>`,
+  ].filter(Boolean).join('')
+
+  const others = monthBooks.filter(b => b.id !== book.id)
+
+  // Some months have more than one pick — say which one this is
+  const sameMonth = d ? botmBooks.filter(b => b.dateCompleted &&
+    b.dateCompleted.getFullYear() === year && b.dateCompleted.getMonth() === month) : []
+  // botmBooks is newest-first, so count from the end for "1 of 2" in date order
+  const pickOf = sameMonth.length > 1
+    ? ` · ${sameMonth.length - sameMonth.indexOf(book)} of ${sameMonth.length}` : ''
+  const hasOlder = index < botmBooks.length - 1
+  const hasNewer = index > 0
 
   return `
     <div class="botm-page-bar">
       <button class="icon-btn botm-back-btn" aria-label="Back">
         <span class="material-symbols-rounded">arrow_back</span>
       </button>
-      <span class="botm-page-title">${monthLabel}</span>
+      <div class="botm-page-heading">
+        <span class="botm-page-kicker">Book of the Month${pickOf}</span>
+        <span class="botm-page-title">${monthLabel}</span>
+      </div>
+      <button class="icon-btn botm-older-btn" aria-label="Previous pick" ${hasOlder ? '' : 'disabled'}>
+        <span class="material-symbols-rounded">chevron_left</span>
+      </button>
+      <button class="icon-btn botm-newer-btn" aria-label="Next pick" ${hasNewer ? '' : 'disabled'}>
+        <span class="material-symbols-rounded">chevron_right</span>
+      </button>
     </div>
 
     <div class="botm-page-scroll">
 
-      <div class="botm-page-hero">
-        <div class="botm-page-cover">${coverHTML}</div>
-        <div class="botm-page-book-info">
-          <div class="botm-page-book-title">${esc(book.title)}</div>
-          <div class="botm-page-book-author">${esc(book.author)}</div>
-          ${book.genre ? `<div class="botm-page-book-meta">${esc(book.genre)}</div>` : ''}
-          ${book.dateReleased ? `<div class="botm-page-book-meta">Published ${esc(book.dateReleased)}</div>` : ''}
-          ${book.pageCount > 0 ? `<div class="botm-page-book-meta">${book.pageCount} pages</div>` : ''}
-          ${dateDisplay ? `<div class="botm-page-book-meta">Completed ${dateDisplay}</div>` : ''}
-          ${book.rating ? `<div style="margin-top:6px;">${starHTML(book.rating)}</div>` : ''}
+      <header class="bd-hero bd-hero--page">
+        <div class="bd-cover">${coverHTML}</div>
+        <div class="bd-hero-text">
+          <h2 class="bd-title">${esc(book.title)}</h2>
+          <div class="bd-author">${esc(book.author)}</div>
+          ${book.rating ? `<div class="botm-page-stars">${starHTML(book.rating)}</div>` : ''}
+          ${facts ? `<div class="bd-facts">${facts}</div>` : ''}
+          ${pills ? `<div class="bd-pills">${pills}</div>` : ''}
         </div>
-        ${book.isBOTY ? `<span class="material-symbols-rounded botm-detail-boty-icon">emoji_events</span>` : ''}
-      </div>
+      </header>
 
-      ${book.notes ? `
-      <div style="padding:16px 16px 0;">
-        <div class="sheet-section-label" style="margin-bottom:6px;">Notes</div>
-        <div style="font-size:0.875rem;color:var(--md-on-surface-variant);line-height:1.55;">${esc(book.notes)}</div>
-      </div>` : ''}
+      <div class="bd-body botm-page-body">
 
-      <div style="padding:20px 16px 4px;">
-        <div class="sheet-section-label">${monthLabel ? monthLabel.toUpperCase() + ' IN REVIEW' : 'MONTH IN REVIEW'}</div>
-      </div>
+        ${book.notes ? `
+        <section class="bd-card">
+          ${cardTitle('format_quote', 'Your thoughts')}
+          <blockquote class="botm-quote">${esc(book.notes)}</blockquote>
+        </section>` : ''}
 
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:0 16px 4px;">
-        <div class="stat-card">
-          <div class="stat-number">${count}</div>
-          <div class="stat-label">Books Read</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number">${pagesDisplay}</div>
-          <div class="stat-label">Pages Read</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number">${avgRating}</div>
-          <div class="stat-label">Avg Rating</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number">${paceDisplay}</div>
-          <div class="stat-label">Pages / Day</div>
-        </div>
-        <div class="stat-card" style="grid-column:1/-1;">
-          <div class="stat-number">${avgDaysDisplay}</div>
-          <div class="stat-label">Days / Book</div>
-        </div>
-      </div>
-
-      <div class="chart-section" style="padding-top:8px;">
-        ${hasRatings ? `
-        <div class="chart-card">
-          <div class="chart-title">Rating Breakdown</div>
-          <div style="max-width:240px;margin:0 auto;">
-            <canvas id="botm-chart-ratings"></canvas>
+        ${others.length ? `
+        <section class="bd-card botm-also-card">
+          ${cardTitle('auto_stories', `Also read in ${monthName}`)}
+          <div class="botm-also-strip">
+            ${others.map(b => `
+              <button class="botm-also-item">
+                <div class="botm-also-cover">
+                  ${b.thumbnail
+                    ? `<img src="${esc(b.thumbnail)}" alt="" loading="lazy" />`
+                    : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`}
+                </div>
+                <span class="botm-also-title">${esc(b.title)}</span>
+                ${b.rating ? `<span class="botm-also-rating">${'★'.repeat(b.rating)}</span>` : ''}
+              </button>
+            `).join('')}
           </div>
-        </div>` : ''}
+        </section>` : ''}
 
-        ${hasAuthors ? `
-        <div class="chart-card">
-          <div class="chart-title">Authors</div>
-          <canvas id="botm-chart-authors"></canvas>
-        </div>` : ''}
-
-        ${hasGenresBar ? `
-        <div class="chart-card">
-          <div class="chart-title">Top Genres</div>
-          <canvas id="botm-chart-genres-bar"></canvas>
-        </div>` : ''}
-
-        ${hasGenres ? `
-        <div class="chart-card">
-          <div class="chart-title">Genre Breakdown</div>
-          <div style="max-width:240px;margin:0 auto;">
-            <canvas id="botm-chart-genres"></canvas>
+        <section class="bd-card">
+          ${cardTitle('insights', `${monthName} in review`)}
+          <div class="botm-stats">
+            <div class="botm-stat"><span class="botm-stat-num">${count}</span><span class="botm-stat-label">Books read</span></div>
+            <div class="botm-stat"><span class="botm-stat-num">${pagesDisplay}</span><span class="botm-stat-label">Pages read</span></div>
+            <div class="botm-stat"><span class="botm-stat-num">${avgRating}</span><span class="botm-stat-label">Avg rating</span></div>
+            <div class="botm-stat"><span class="botm-stat-num">${paceDisplay}</span><span class="botm-stat-label">Pages / day</span></div>
+            <div class="botm-stat"><span class="botm-stat-num">${avgDaysDisplay}</span><span class="botm-stat-label">Days / book</span></div>
           </div>
-        </div>` : ''}
-      </div>
+        </section>
 
-      <div style="height:32px;"></div>
+        <div class="chart-section botm-page-charts">
+          ${hasRatings ? `
+          <div class="chart-card">
+            <div class="chart-title">Rating Breakdown</div>
+            <div style="max-width:240px;margin:0 auto;">
+              <canvas id="botm-chart-ratings"></canvas>
+            </div>
+          </div>` : ''}
+
+          ${hasAuthors ? `
+          <div class="chart-card">
+            <div class="chart-title">Authors</div>
+            <canvas id="botm-chart-authors"></canvas>
+          </div>` : ''}
+
+          ${hasGenresBar ? `
+          <div class="chart-card">
+            <div class="chart-title">Top Genres</div>
+            <canvas id="botm-chart-genres-bar"></canvas>
+          </div>` : ''}
+
+          ${hasGenres ? `
+          <div class="chart-card">
+            <div class="chart-title">Genre Breakdown</div>
+            <div style="max-width:240px;margin:0 auto;">
+              <canvas id="botm-chart-genres"></canvas>
+            </div>
+          </div>` : ''}
+        </div>
+      </div>
     </div>
   `
+}
+
+function fact(icon, text) {
+  return `<span class="bd-fact"><span class="material-symbols-rounded">${icon}</span>${text}</span>`
+}
+
+function cardTitle(icon, text) {
+  return `<h3 class="bd-card-title"><span class="material-symbols-rounded">${icon}</span>${text}</h3>`
 }
 
 // ── Month charts ──────────────────────────────────────────────────────────────

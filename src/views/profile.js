@@ -5,7 +5,7 @@ import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
 import { mountReadingGoal } from './reading-goal.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
-import { backHandlerStack } from '../main.js'
+import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 import { Chart, registerables } from 'chart.js'
 import { chartColors, getThemePref, setThemePref } from '../theme.js'
 
@@ -680,7 +680,7 @@ function openYearInReview(books) {
   function closeSheet(source) {
     const idx = backHandlerStack.indexOf(closeSheet)
     if (idx !== -1) backHandlerStack.splice(idx, 1)
-    if (source !== 'popstate') history.back()
+    if (source !== 'popstate') popOwnHistoryEntry()
     scrim.classList.add('closing')
     sheet.classList.add('closing')
     setTimeout(() => { scrim.remove(); sheet.remove() }, 300)

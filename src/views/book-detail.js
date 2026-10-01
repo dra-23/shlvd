@@ -11,7 +11,7 @@ async function populateSeriesDatalist(sheet) {
   if (list) list.innerHTML = _seriesCache.map(s => `<option value="${esc(s)}">`).join('')
 }
 import { showSnackbar } from './shelves.js'
-import { backHandlerStack } from '../main.js'
+import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 
 const SHELF_LABELS = { want: 'TBR', reading: 'Reading', read: 'Read', dnf: 'DNF' }
 
@@ -241,7 +241,7 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
     const idx = backHandlerStack.indexOf(closeSheet)
     if (idx !== -1) backHandlerStack.splice(idx, 1)
     // If manually closed, pop the history entry we pushed
-    if (source !== 'popstate') history.back()
+    if (source !== 'popstate') popOwnHistoryEntry()
     scrim.classList.add('closing')
     sheet.classList.add('closing')
     onClose?.()
@@ -510,7 +510,7 @@ export function openManualAdd(onDone) {
   function closeSheet(source) {
     const idx = backHandlerStack.indexOf(closeSheet)
     if (idx !== -1) backHandlerStack.splice(idx, 1)
-    if (source !== 'popstate') history.back()
+    if (source !== 'popstate') popOwnHistoryEntry()
     scrim.classList.add('closing')
     sheet.classList.add('closing')
     setTimeout(() => { scrim.remove(); sheet.remove() }, 300)
