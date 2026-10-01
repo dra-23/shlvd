@@ -1,3 +1,4 @@
+import { esc } from '../escape.js'
 import { watchBotm, watchAllBooks } from '../db.js'
 import { backHandlerStack } from '../main.js'
 import { Chart, registerables } from 'chart.js'
@@ -199,7 +200,7 @@ function buildPageHTML(book, monthLabel, monthBooks) {
   const hasGenresBar  = genreCount >= 2
 
   const coverHTML = book.thumbnail
-    ? `<img src="${book.thumbnail}" alt="${book.title}" />`
+    ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" />`
     : `<div class="book-cover-placeholder" style="width:100%;height:100%;">
          <span class="material-symbols-rounded">menu_book</span>
        </div>`
@@ -221,10 +222,10 @@ function buildPageHTML(book, monthLabel, monthBooks) {
       <div class="botm-page-hero">
         <div class="botm-page-cover">${coverHTML}</div>
         <div class="botm-page-book-info">
-          <div class="botm-page-book-title">${book.title}</div>
-          <div class="botm-page-book-author">${book.author}</div>
-          ${book.genre ? `<div class="botm-page-book-meta">${book.genre}</div>` : ''}
-          ${book.dateReleased ? `<div class="botm-page-book-meta">Published ${book.dateReleased}</div>` : ''}
+          <div class="botm-page-book-title">${esc(book.title)}</div>
+          <div class="botm-page-book-author">${esc(book.author)}</div>
+          ${book.genre ? `<div class="botm-page-book-meta">${esc(book.genre)}</div>` : ''}
+          ${book.dateReleased ? `<div class="botm-page-book-meta">Published ${esc(book.dateReleased)}</div>` : ''}
           ${book.pageCount > 0 ? `<div class="botm-page-book-meta">${book.pageCount} pages</div>` : ''}
           ${dateDisplay ? `<div class="botm-page-book-meta">Completed ${dateDisplay}</div>` : ''}
           ${book.rating ? `<div style="margin-top:6px;">${starHTML(book.rating)}</div>` : ''}
@@ -235,7 +236,7 @@ function buildPageHTML(book, monthLabel, monthBooks) {
       ${book.notes ? `
       <div style="padding:16px 16px 0;">
         <div class="sheet-section-label" style="margin-bottom:6px;">Notes</div>
-        <div style="font-size:0.875rem;color:var(--md-on-surface-variant);line-height:1.55;">${book.notes}</div>
+        <div style="font-size:0.875rem;color:var(--md-on-surface-variant);line-height:1.55;">${esc(book.notes)}</div>
       </div>` : ''}
 
       <div style="padding:20px 16px 4px;">
@@ -490,10 +491,10 @@ function botmCardHTML(book) {
   const month = formatMonth(book.dateCompleted)
 
   const coverHTML = book.thumbnail
-    ? `<img src="${book.thumbnail}" alt="${book.title}" loading="lazy"
+    ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" loading="lazy"
            data-book-id="${book.id}"
-           data-title="${book.title.replace(/"/g, '&quot;')}"
-           data-author="${(book.author || '').replace(/"/g, '&quot;')}" />`
+           data-title="${esc(book.title)}"
+           data-author="${esc(book.author)}" />`
     : `<div class="book-cover-placeholder" style="width:100%;height:100%;">
          <span class="material-symbols-rounded" style="font-size:28px">menu_book</span>
        </div>`
@@ -503,10 +504,10 @@ function botmCardHTML(book) {
       <div class="botm-cover-wrap">${coverHTML}</div>
       <div class="botm-info">
         ${month ? `<div class="botm-month-badge">${month}</div>` : ''}
-        <div class="botm-title">${book.title}</div>
-        <div class="botm-author">${book.author}</div>
+        <div class="botm-title">${esc(book.title)}</div>
+        <div class="botm-author">${esc(book.author)}</div>
         ${starHTML(book.rating)}
-        ${book.genre ? `<div class="botm-genre">${book.genre}</div>` : ''}
+        ${book.genre ? `<div class="botm-genre">${esc(book.genre)}</div>` : ''}
       </div>
       ${book.isBOTY ? `<span class="material-symbols-rounded botm-boty-icon">emoji_events</span>` : ''}
       <span class="material-symbols-rounded botm-chevron">chevron_right</span>

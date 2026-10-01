@@ -1,3 +1,4 @@
+import { esc } from '../escape.js'
 import { auth, signOutUser } from '../firebase.js'
 import { watchAllBooks, getBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
@@ -415,7 +416,7 @@ function renderCalendarGrid(container) {
     const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d
     const bks = dayMap.get(d) || []
     const chips = bks.map(b =>
-      `<button class="cal-book-chip" data-book-id="${b.id}">${b.title}</button>`
+      `<button class="cal-book-chip" data-book-id="${b.id}">${esc(b.title)}</button>`
     ).join('')
     html += `<div class="cal-day${isToday ? ' cal-today' : ''}${bks.length ? ' cal-has-books' : ''}">
       <div class="cal-day-num">${d}</div>
@@ -559,8 +560,8 @@ function openYearInReview(books) {
             ${bestBook ? `
             <div class="yir-best-book">
               <div class="yir-best-label">Favourite read</div>
-              <div class="yir-best-title">${bestBook.title}</div>
-              <div class="yir-best-author">${bestBook.author}</div>
+              <div class="yir-best-title">${esc(bestBook.title)}</div>
+              <div class="yir-best-author">${esc(bestBook.author)}</div>
               <div class="yir-best-stars">${starsHTML(bestBook.rating)}</div>
             </div>` : ''}
           `}
@@ -620,7 +621,7 @@ function buildHTML(user) {
     <div class="profile-screen">
       <div class="profile-hero">
         <div class="profile-avatar">${avatarHTML}</div>
-        <div class="profile-name">${user?.displayName || 'Reader'}</div>
+        <div class="profile-name">${esc(user?.displayName || 'Reader')}</div>
         <div class="profile-email">${user?.email || ''}</div>
       </div>
 

@@ -1,3 +1,4 @@
+import { esc } from '../escape.js'
 import { searchBooks } from '../books-api.js'
 import { getBook } from '../db.js'
 import { openBookDetail, openManualAdd } from './book-detail.js'
@@ -132,7 +133,7 @@ async function doSearch(query, resultsEl) {
 
 function resultRowHTML(book) {
   const coverHTML = book.thumbnail
-    ? `<img src="${book.thumbnail}" alt="${book.title}" loading="lazy" />`
+    ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" loading="lazy" />`
     : ''
 
   const badge = book.existingShelf
@@ -143,8 +144,8 @@ function resultRowHTML(book) {
     <div class="search-result">
       <div class="search-result-cover">${coverHTML}</div>
       <div class="search-result-info">
-        <div class="search-result-title">${book.title}</div>
-        <div class="search-result-author">${book.author}</div>
+        <div class="search-result-title">${esc(book.title)}</div>
+        <div class="search-result-author">${esc(book.author)}</div>
         <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
           ${book.publishedDate ? `<span class="body-small" style="color:var(--md-on-surface-variant)">${book.publishedDate.substring(0,4)}</span>` : ''}
           ${book.source === 'openlibrary' ? `<span class="source-badge">Open Library</span>` : ''}
@@ -181,7 +182,7 @@ function noResultsHTML(query) {
   return `
     <div class="empty-state">
       <span class="material-symbols-rounded">sentiment_dissatisfied</span>
-      <div class="empty-state-title">No results for "${query}"</div>
+      <div class="empty-state-title">No results for "${esc(query)}"</div>
       <div class="empty-state-body">Try a different title or author name.</div>
     </div>
   `

@@ -1,3 +1,4 @@
+import { esc, safeHTML } from '../escape.js'
 import { addBook, updateBook, removeBook, setBOTY, getSeriesList } from '../db.js'
 
 // Cached series list for autocomplete — invalidated on every save
@@ -7,7 +8,7 @@ async function populateSeriesDatalist(sheet) {
     try { _seriesCache = await getSeriesList() } catch { _seriesCache = [] }
   }
   const list = sheet.querySelector('#series-datalist')
-  if (list) list.innerHTML = _seriesCache.map(s => `<option value="${s}">`).join('')
+  if (list) list.innerHTML = _seriesCache.map(s => `<option value="${esc(s)}">`).join('')
 }
 import { showSnackbar } from './shelves.js'
 import { backHandlerStack } from '../main.js'
@@ -512,7 +513,7 @@ export function openManualAdd(onDone) {
 
 function buildSheetHTML(book, existingShelf, extraHTML = '') {
   const coverHTML = book.thumbnail
-    ? `<img src="${book.thumbnail}" alt="${book.title}" />`
+    ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" />`
     : `<div class="book-cover-placeholder">
          <span class="material-symbols-rounded">menu_book</span>
        </div>`
@@ -529,12 +530,12 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
     <div class="sheet-header">
       <div class="sheet-cover">${coverHTML}</div>
       <div class="sheet-meta">
-        <div class="sheet-title">${book.title}</div>
-        <div class="sheet-author">${book.author}</div>
+        <div class="sheet-title">${esc(book.title)}</div>
+        <div class="sheet-author">${esc(book.author)}</div>
         <input type="text" class="genre-meta-input" id="genre-input"
-          value="${book.genre || book.categories?.[0] || ''}" placeholder="Add genre…" />
+          value="${esc(book.genre || book.categories?.[0])}" placeholder="Add genre…" />
         ${book.pageCount > 0 ? `<div class="body-small" style="color:var(--md-on-surface-variant);margin-top:2px;">${book.pageCount} pages</div>` : ''}
-        ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant);">Published ${book.dateReleased}</div>` : ''}
+        ${book.dateReleased ? `<div class="body-small" style="color:var(--md-on-surface-variant);">Published ${esc(book.dateReleased)}</div>` : ''}
       </div>
       <button class="icon-btn" id="close-btn">
         <span class="material-symbols-rounded">close</span>
@@ -547,7 +548,7 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
       <!-- Description -->
       <div>
         <div class="sheet-section-label">Description</div>
-        <div class="description-text" id="description-text">${book.description}</div>
+        <div class="description-text" id="description-text">${safeHTML(book.description)}</div>
         <button class="btn btn-text" id="desc-toggle" style="padding:4px 0;margin-top:4px;">Show more</button>
       </div>
       ` : ''}
@@ -565,12 +566,12 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
           <div class="sheet-section-label">Series</div>
           <input type="text" class="manual-input" id="series-input"
             list="series-datalist"
-            value="${book.series || ''}" placeholder="Series name…" autocomplete="off" />
+            value="${esc(book.series)}" placeholder="Series name…" autocomplete="off" />
         </div>
         <div>
           <div class="sheet-section-label">Book #</div>
           <input type="text" class="manual-input" id="series-num-input"
-            value="${book.seriesNumber || ''}" placeholder="1" autocomplete="off" />
+            value="${esc(book.seriesNumber)}" placeholder="1" autocomplete="off" />
         </div>
       </div>
 
@@ -628,7 +629,7 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
       <div>
         <div class="sheet-section-label">Notes</div>
         <textarea class="notes-textarea" id="notes-input"
-          placeholder="Your thoughts…">${book.notes || ''}</textarea>
+          placeholder="Your thoughts…">${esc(book.notes)}</textarea>
       </div>
 
       <!-- Save -->

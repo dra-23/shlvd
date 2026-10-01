@@ -1,3 +1,4 @@
+import { esc } from '../escape.js'
 import { watchShelf, getBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
 import { navigateTo } from '../main.js'
@@ -147,11 +148,11 @@ export function renderShelves(container) {
     resultsEl.innerHTML = hits.map(b => `
       <div class="search-result shelf-search-result" data-id="${b.id}">
         <div class="search-result-cover">
-          ${b.thumbnail ? `<img src="${b.thumbnail}" alt="${b.title}" loading="lazy" />` : ''}
+          ${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="${esc(b.title)}" loading="lazy" />` : ''}
         </div>
         <div class="search-result-info">
-          <div class="search-result-title">${b.title}</div>
-          <div class="search-result-author">${b.author}</div>
+          <div class="search-result-title">${esc(b.title)}</div>
+          <div class="search-result-author">${esc(b.author)}</div>
         </div>
         <span class="search-result-badge">${SHELF_BADGE[b.shelf] || b.shelf}</span>
       </div>
@@ -333,13 +334,13 @@ function attachCardListeners(el, books, shelfId) {
 
 function bookCardHTML(book, shelf) {
   const coverHTML = book.thumbnail
-    ? `<img src="${book.thumbnail}" alt="${book.title}" loading="lazy"
+    ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" loading="lazy"
            data-book-id="${book.id}"
-           data-title="${book.title.replace(/"/g, '&quot;')}"
-           data-author="${(book.author || '').replace(/"/g, '&quot;')}" />`
+           data-title="${esc(book.title)}"
+           data-author="${esc(book.author)}" />`
     : `<div class="book-cover-placeholder">
          <span class="material-symbols-rounded">menu_book</span>
-         <div class="placeholder-title">${book.title}</div>
+         <div class="placeholder-title">${esc(book.title)}</div>
        </div>`
 
   const progressHTML = shelf === 'reading' && book.pageCount > 0
@@ -360,8 +361,8 @@ function bookCardHTML(book, shelf) {
     <div class="book-card">
       <div class="book-cover">${coverHTML}${botmBadge}${botyBadge}</div>
       <div class="book-card-info">
-        <div class="book-card-title">${book.title}</div>
-        <div class="book-card-author">${book.author}</div>
+        <div class="book-card-title">${esc(book.title)}</div>
+        <div class="book-card-author">${esc(book.author)}</div>
         ${book.rating > 0 ? `<div class="book-card-rating">${'★'.repeat(book.rating)}${'☆'.repeat(5 - book.rating)}</div>` : ''}
         ${progressHTML}
       </div>
@@ -453,7 +454,7 @@ function seriesCardHTML(name, books) {
 
   const nextBook = sorted.find(b => b.shelf !== 'read')
   const nextLabel = nextBook
-    ? `${nextBook.seriesNumber ? `#${nextBook.seriesNumber} · ` : ''}${nextBook.title}`
+    ? `${nextBook.seriesNumber ? `#${esc(nextBook.seriesNumber)} · ` : ''}${esc(nextBook.title)}`
     : 'All read!'
 
   const isExpanded = expandedSeries.has(name)
@@ -464,11 +465,11 @@ function seriesCardHTML(name, books) {
     return `
       <div class="series-book-row" data-id="${b.id}">
         <div class="series-book-cover">
-          ${b.thumbnail ? `<img src="${b.thumbnail}" alt="${b.title}" loading="lazy" />` : ''}
+          ${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="${esc(b.title)}" loading="lazy" />` : ''}
         </div>
         <div class="series-book-info">
-          ${b.seriesNumber ? `<span class="series-book-num">#${b.seriesNumber}</span>` : ''}
-          <span class="series-book-title">${b.title}</span>
+          ${b.seriesNumber ? `<span class="series-book-num">#${esc(b.seriesNumber)}</span>` : ''}
+          <span class="series-book-title">${esc(b.title)}</span>
         </div>
         <span class="series-book-badge ${badgeClass}">${badge}</span>
       </div>`
@@ -478,10 +479,10 @@ function seriesCardHTML(name, books) {
     <div class="series-card">
       <div class="series-card-header">
         <div class="series-card-info">
-          <div class="series-card-name">${name}</div>
+          <div class="series-card-name">${esc(name)}</div>
           <div class="series-card-count">${readCount} of ${total} read</div>
         </div>
-        <button class="icon-btn series-expand-btn" data-series="${name}">
+        <button class="icon-btn series-expand-btn" data-series="${esc(name)}">
           <span class="material-symbols-rounded">${isExpanded ? 'expand_less' : 'expand_more'}</span>
         </button>
       </div>
