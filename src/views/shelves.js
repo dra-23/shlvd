@@ -69,7 +69,7 @@ export function renderShelves(container) {
     if (!books) return
     renderGoal(container, books, goals)
     renderReading(container, books)
-    renderRow(container, '#home-next', 'Up next',
+    renderRow(container, '#home-next', 'TBR',
       books.filter(b => b.shelf === 'want').sort(byDesc(b => b.addedAt)),
       { shelf: 'want', sort: 'added' }, 'Nothing on your TBR yet.')
     renderRow(container, '#home-recent', 'Recently finished',
@@ -137,7 +137,7 @@ function renderReading(container, books) {
     ${reading.length ? reading.map(readingCardHTML).join('') : `
       <div class="home-empty">
         <span class="material-symbols-rounded">auto_stories</span>
-        Not reading anything right now — pick something from Up next.
+        Not reading anything right now — pick something from your TBR.
       </div>`}
   `
 }
