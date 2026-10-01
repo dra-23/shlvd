@@ -1,7 +1,8 @@
 import { esc } from '../escape.js'
-import { watchBotm, watchAllBooks } from '../db.js'
+import { watchBotm, watchAllBooks, updateBook } from '../db.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 import { openBookDetail } from './book-detail.js'
+import { showSnackbar } from './shelves.js'
 import { Chart, registerables } from 'chart.js'
 import { chartColors } from '../theme.js'
 
@@ -80,9 +81,13 @@ export function renderBotm(container) {
   `
 
   const content = container.querySelector('#botm-content')
+  let picks = null, allBooks = null
 
-  const unsubBotm = watchBotm(books => {
-    if (!books.length) {
+  // Both watchers feed the list: picks for the cards, all books for
+  // Book of the Year and the "choose from N books" counts on empty months
+  const render = () => {
+    if (!picks || !allBooks) return
+    if (!picks.length) {
       content.innerHTML = `
         <div class="empty-state">
           <span class="material-symbols-rounded">auto_awesome</span>
@@ -92,25 +97,227 @@ export function renderBotm(container) {
       `
       return
     }
+    // Page navigation steps through dated picks newest-first, undated last
+    botmBooks = [...picks.filter(b => b.dateCompleted), ...picks.filter(b => !b.dateCompleted)]
+    content.innerHTML = buildListHTML(botmBooks, allBooks)
+  }
 
-    const groups = groupByYear(books)
-    // Same order as the cards on screen, so card i is botmBooks[i]
-    botmBooks = groups.flatMap(g => g.books)
-    content.innerHTML = groups.map(({ year, books: yb }) => `
-      <div class="botm-year-header">${year}</div>
-      <div class="botm-list">${yb.map(botmCardHTML).join('')}</div>
-    `).join('')
-
-    content.querySelectorAll('.botm-card').forEach((card, i) => {
-      card.addEventListener('click', () => openBotmPage(i, container))
-    })
+  content.addEventListener('click', e => {
+    const card = e.target.closest('[data-index]')
+    if (card) return openBotmPage(Number(card.dataset.index), container)
+    const boty = e.target.closest('[data-boty-id]')
+    if (boty) {
+      const book = allBooks.find(b => b.id === boty.dataset.botyId)
+      if (book) openBookDetail(book, book.shelf, null)
+      return
+    }
+    const slot = e.target.closest('.botm-slot[data-year]')
+    if (slot) openPickChooser(Number(slot.dataset.year), Number(slot.dataset.month))
   })
 
+  const unsubBotm = watchBotm(books => { picks = books; render() })
   const unsubAll = watchAllBooks(books => {
+    allBooks = books
     allReadBooks = books.filter(b => b.shelf === 'read')
+    render()
   })
 
   return () => { unsubBotm(); unsubAll() }
+}
+
+const monthKey = d => `${d.getFullYear()}-${d.getMonth()}`
+
+function buildListHTML(picks, allBooks) {
+  const dated = picks.filter(b => b.dateCompleted)
+  const undated = picks.filter(b => !b.dateCompleted)
+  const indexOf = book => picks.indexOf(book)
+
+  // Picks and books read, bucketed by month
+  const picksByMonth = new Map()
+  dated.forEach(b => {
+    const k = monthKey(b.dateCompleted)
+    if (!picksByMonth.has(k)) picksByMonth.set(k, [])
+    picksByMonth.get(k).push(b)
+  })
+  const readByMonth = new Map()
+  allReadBooks.forEach(b => {
+    if (!b.dateCompleted) return
+    const k = monthKey(b.dateCompleted)
+    readByMonth.set(k, (readByMonth.get(k) || 0) + 1)
+  })
+
+  // Every month from the first pick up to this month
+  const now = new Date()
+  const first = dated.length
+    ? dated.reduce((min, b) => b.dateCompleted < min ? b.dateCompleted : min, dated[0].dateCompleted)
+    : now
+  let html = ''
+
+  for (let y = now.getFullYear(); y >= first.getFullYear(); y--) {
+    const lastMonth  = y === now.getFullYear() ? now.getMonth() : 11
+    const firstMonth = y === first.getFullYear() ? first.getMonth() : 0
+
+    const yearPicks = dated.filter(b => b.dateCompleted.getFullYear() === y)
+    const rated = yearPicks.filter(b => b.rating > 0)
+    const avg = rated.length ? (rated.reduce((s, b) => s + b.rating, 0) / rated.length).toFixed(1) : null
+
+    html += `
+      <div class="botm-year-header">
+        <span>${y}</span>
+        <span class="botm-year-summary">${yearPicks.length} pick${yearPicks.length === 1 ? '' : 's'}${avg ? ` · ★ ${avg}` : ''}</span>
+      </div>
+      ${botySpotlightHTML(y, yearPicks, allBooks)}
+      <div class="botm-list">`
+
+    for (let m = lastMonth; m >= firstMonth; m--) {
+      const k = `${y}-${m}`
+      const monthPicks = picksByMonth.get(k)
+      if (monthPicks) {
+        html += monthPicks.map(b => botmCardHTML(b, indexOf(b))).join('')
+      } else {
+        html += emptySlotHTML(y, m, readByMonth.get(k) || 0, y === now.getFullYear() && m === now.getMonth())
+      }
+    }
+    html += `</div>`
+  }
+
+  if (undated.length) {
+    html += `
+      <div class="botm-year-header"><span>No date</span></div>
+      <div class="botm-list">${undated.map(b => botmCardHTML(b, indexOf(b))).join('')}</div>`
+  }
+  return html
+}
+
+function botySpotlightHTML(year, yearPicks, allBooks) {
+  const boty = allBooks.find(b => b.isBOTY &&
+    (b.botyYear ?? b.dateCompleted?.getFullYear()) === year)
+
+  if (!boty) {
+    // Only nudge once there's something to choose from
+    if (!yearPicks.length) return ''
+    return `
+      <div class="botm-boty-hint">
+        <span class="material-symbols-rounded">emoji_events</span>
+        <span>No Book of the Year for ${year} yet — open a pick below and tap <b>Book of the Year</b>.</span>
+      </div>`
+  }
+
+  const pickIndex = botmBooks.indexOf(boty)
+  const target = pickIndex >= 0 ? `data-index="${pickIndex}"` : `data-boty-id="${esc(boty.id)}"`
+  const cover = boty.thumbnail
+    ? `<img src="${esc(boty.thumbnail)}" alt="${esc(boty.title)}" />`
+    : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`
+
+  return `
+    <button class="botm-boty-spotlight" ${target}
+      style="--cover:url(${esc(JSON.stringify(boty.thumbnail || ''))})">
+      <div class="botm-boty-cover">${cover}</div>
+      <div class="botm-boty-info">
+        <span class="botm-boty-label">
+          <span class="material-symbols-rounded">emoji_events</span>Book of the Year
+        </span>
+        <span class="botm-boty-title">${esc(boty.title)}</span>
+        <span class="botm-boty-author">${esc(boty.author)}</span>
+        ${starHTML(boty.rating)}
+        ${boty.dateCompleted ? `<span class="botm-boty-month">${boty.dateCompleted.toLocaleDateString('en-US', { month: 'long' })} pick</span>` : ''}
+      </div>
+    </button>`
+}
+
+function emptySlotHTML(year, month, readCount, isCurrent) {
+  const label = new Date(year, month, 1)
+    .toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()
+  const canPick = readCount > 0
+  const sub = isCurrent
+    ? (canPick ? `In progress · ${readCount} book${readCount === 1 ? '' : 's'} so far` : 'In progress')
+    : (canPick ? `Choose from ${readCount} book${readCount === 1 ? '' : 's'} read` : 'No books read')
+
+  return `
+    <div class="botm-slot ${canPick ? '' : 'botm-slot--empty'}"
+      ${canPick ? `data-year="${year}" data-month="${month}" role="button" tabindex="0"` : ''}>
+      <div class="botm-slot-icon">
+        <span class="material-symbols-rounded">${isCurrent ? 'hourglass_top' : canPick ? 'add' : 'remove'}</span>
+      </div>
+      <div class="botm-info">
+        <div class="botm-month-badge botm-month-badge--muted">${label}</div>
+        <div class="botm-slot-title">${isCurrent ? 'This month' : 'No pick yet'}</div>
+        <div class="botm-slot-sub">${sub}</div>
+      </div>
+      ${canPick ? `<span class="material-symbols-rounded botm-chevron">chevron_right</span>` : ''}
+    </div>`
+}
+
+// ── Choose a pick for an empty month ──────────────────────────────────────────
+
+function openPickChooser(year, month) {
+  const monthName = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const books = allReadBooks
+    .filter(b => b.dateCompleted && b.dateCompleted.getFullYear() === year && b.dateCompleted.getMonth() === month)
+    .sort((a, b) => (b.rating || 0) - (a.rating || 0) || a.dateCompleted - b.dateCompleted)
+
+  const scrim = document.createElement('div')
+  scrim.className = 'sheet-scrim'
+  const sheet = document.createElement('div')
+  sheet.className = 'bottom-sheet'
+  sheet.innerHTML = `
+    <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
+    <div class="botm-chooser-head">
+      <div>
+        <div class="botm-page-kicker">Choose Book of the Month</div>
+        <div class="botm-chooser-title">${monthName}</div>
+      </div>
+      <button class="icon-btn" id="chooser-close" aria-label="Close">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+    </div>
+    <div class="botm-chooser-list">
+      ${books.map((b, i) => `
+        <button class="botm-chooser-row" data-i="${i}">
+          <div class="botm-chooser-cover">
+            ${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="" loading="lazy" />`
+              : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`}
+          </div>
+          <div class="botm-chooser-info">
+            <span class="botm-chooser-book">${esc(b.title)}</span>
+            <span class="botm-chooser-author">${esc(b.author)}</span>
+            ${b.rating ? `<span class="botm-chooser-rating">${'★'.repeat(b.rating)}<span>${'★'.repeat(5 - b.rating)}</span></span>` : ''}
+          </div>
+          <span class="material-symbols-rounded botm-chooser-pick">workspace_premium</span>
+        </button>`).join('')}
+    </div>
+  `
+  document.body.appendChild(scrim)
+  document.body.appendChild(sheet)
+
+  history.pushState({ sheet: true }, '')
+  function close(source) {
+    const idx = backHandlerStack.indexOf(close)
+    if (idx !== -1) backHandlerStack.splice(idx, 1)
+    if (source !== 'popstate') popOwnHistoryEntry()
+    scrim.classList.add('closing')
+    sheet.classList.add('closing')
+    setTimeout(() => { scrim.remove(); sheet.remove() }, 300)
+  }
+  backHandlerStack.push(close)
+  scrim.addEventListener('click', () => close('manual'))
+  sheet.querySelector('#chooser-close').addEventListener('click', () => close('manual'))
+
+  sheet.querySelector('.botm-chooser-list').addEventListener('click', async e => {
+    const row = e.target.closest('.botm-chooser-row')
+    if (!row) return
+    const book = books[Number(row.dataset.i)]
+    row.disabled = true
+    try {
+      await updateBook(book.id, { isBOTM: true })
+      showSnackbar(`✦ ${book.title} is ${monthName.split(' ')[0]}’s Book of the Month`)
+      close('manual')
+    } catch (err) {
+      console.error(err)
+      row.disabled = false
+      showSnackbar('Something went wrong')
+    }
+  })
 }
 
 // ── BotM detail page ──────────────────────────────────────────────────────────
@@ -119,6 +326,7 @@ export function renderBotm(container) {
 let botmBooks = []
 
 function openBotmPage(index, viewEl) {
+  if (!botmBooks[index]) return
   const page = document.createElement('div')
   page.className = 'botm-detail-page'
   page.style.transform = 'translateX(100%)'
@@ -568,20 +776,7 @@ function tooltipStyle() {
 
 // ── BotM list helpers ─────────────────────────────────────────────────────────
 
-function groupByYear(books) {
-  const map = new Map()
-  books.forEach(book => {
-    const d    = book.dateCompleted
-    const year = d ? (d instanceof Date ? d : new Date(d)).getFullYear().toString() : 'Unknown'
-    if (!map.has(year)) map.set(year, [])
-    map.get(year).push(book)
-  })
-  return Array.from(map.entries())
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([year, books]) => ({ year, books }))
-}
-
-function botmCardHTML(book) {
+function botmCardHTML(book, index) {
   const month = formatMonth(book.dateCompleted)
 
   const coverHTML = book.thumbnail
@@ -594,7 +789,7 @@ function botmCardHTML(book) {
        </div>`
 
   return `
-    <div class="botm-card">
+    <div class="botm-card" data-index="${index}" role="button" tabindex="0">
       <div class="botm-cover-wrap">${coverHTML}</div>
       <div class="botm-info">
         ${month ? `<div class="botm-month-badge">${month}</div>` : ''}
@@ -623,3 +818,4 @@ function skeletonList() {
 }
 
 export function destroyBotm() {}
+
