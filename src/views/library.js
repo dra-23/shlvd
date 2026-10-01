@@ -80,6 +80,10 @@ export function renderLibrary(container) {
           <button class="icon-btn" id="lib-search-clear" style="display:none" aria-label="Clear search">
             <span class="material-symbols-rounded">close</span>
           </button>
+          <button class="lib-filter-icon" id="lib-filters" aria-label="Sort and filter">
+            <span class="material-symbols-rounded">tune</span>
+            <span class="lib-filter-badge" id="lib-filter-badge" hidden></span>
+          </button>
         </div>
         ${avatarButtonHTML()}
       </div>
@@ -95,6 +99,8 @@ export function renderLibrary(container) {
   const results  = container.querySelector('#lib-results')
   const search   = container.querySelector('#lib-search')
   const clearBtn = container.querySelector('#lib-search-clear')
+  const filterBtn = container.querySelector('#lib-filters')
+  const badge    = container.querySelector('#lib-filter-badge')
 
   const update = (changes = {}, { keepScroll = false } = {}) => {
     state = { ...state, ...changes }
@@ -108,7 +114,21 @@ export function renderLibrary(container) {
 
   function render(keepScroll) {
     const prevCount = keepScroll && feed ? feed.rendered : 0
-    controls.innerHTML = state.segment === 'series' ? seriesControlsHTML(state, books, query) : booksControlsHTML(state, books, query)
+    controls.innerHTML = controlsHTML(state, books)
+    // The chip row re-renders scrolled to the start — bring the selected chip into view
+    const chipRow = controls.querySelector('.lib-chips')
+    const selected = chipRow.querySelector('.selected')
+    if (selected) {
+      const overflow = selected.offsetLeft + selected.offsetWidth + 16 - chipRow.clientWidth
+      if (overflow > 0) chipRow.scrollLeft = overflow
+    }
+    // Badge = active filters (books) or a non-default series filter
+    const n = state.segment === 'series'
+      ? (state.seriesFilter !== 'all' ? 1 : 0)
+      : activeFilterCount(state.filters)
+    badge.hidden = !n
+    badge.textContent = n
+    filterBtn.classList.toggle('active', !!n)
     if (!keepScroll) content.scrollTop = 0
     if (state.segment === 'series') renderSeries()
     else renderBooks(Math.max(PAGE, prevCount))
@@ -185,6 +205,8 @@ export function renderLibrary(container) {
     const list = all
       .filter(s => seriesMatches(s, state.seriesFilter))
       .filter(s => !q || s.name.toLowerCase().includes(q) || s.books.some(b => b.title.toLowerCase().includes(q)))
+    const countEl = controls.querySelector('#lib-count')
+    if (countEl) countEl.textContent = `${list.length} series`
     results.innerHTML = list.length
       ? `<div class="lib-series-list">${list.map(seriesCardHTML).join('')}</div>`
       : `<div class="empty-state" style="padding-top:40px">
@@ -195,31 +217,21 @@ export function renderLibrary(container) {
   }
 
   // ── Events ────────────────────────────────────────────
+  // The filter icon in the search bar and the sort label share one sheet
+  const openSortFilter = () => openSortFilterSheet(books, state, changes => update(changes))
+  filterBtn.addEventListener('click', openSortFilter)
+
   controls.addEventListener('click', e => {
     const t = e.target
-    const seg = t.closest('[data-segment]')
-    if (seg) return update({ segment: seg.dataset.segment })
     const shelf = t.closest('[data-shelf]')
-    if (shelf) return update({ shelf: shelf.dataset.shelf })
+    if (shelf) {
+      return update(shelf.dataset.shelf === 'series'
+        ? { segment: 'series' }
+        : { segment: 'books', shelf: shelf.dataset.shelf })
+    }
     const layout = t.closest('[data-layout]')
     if (layout) return update({ layout: layout.dataset.layout }, { keepScroll: true })
-    const sf = t.closest('[data-series-filter]')
-    if (sf) return update({ seriesFilter: sf.dataset.seriesFilter })
-    if (t.closest('#lib-filters')) return openFilterSheet(books, state, f => update({ filters: f }))
-    const chip = t.closest('[data-remove-filter]')
-    if (chip) {
-      const [key, value] = chip.dataset.removeFilter.split(':')
-      const f = { ...state.filters }
-      if (key === 'genre') f.genres = f.genres.filter(g => g !== value)
-      if (key === 'year') f.years = f.years.filter(y => String(y) !== value)
-      if (key === 'rating') f.minRating = 0
-      if (key === 'series') f.series = 'any'
-      return update({ filters: f })
-    }
-    if (t.closest('#lib-clear-filters')) return update({ filters: NO_FILTERS })
-  })
-  controls.addEventListener('change', e => {
-    if (e.target.id === 'lib-sort') update({ sort: e.target.value })
+    if (t.closest('#lib-sort-open')) return openSortFilter()
   })
 
   results.addEventListener('click', e => {
@@ -297,74 +309,42 @@ function seriesMatches(s, filter) {
 
 // ── Controls ──────────────────────────────────────────────────────────────────
 
-function segmentHTML(state) {
-  return `
-    <div class="lib-segmented" role="tablist">
-      <button role="tab" data-segment="books" class="${state.segment === 'books' ? 'selected' : ''}">Books</button>
-      <button role="tab" data-segment="series" class="${state.segment === 'series' ? 'selected' : ''}">Series</button>
-    </div>`
-}
+const SERIES_FILTERS = [['all', 'All'], ['progress', 'In progress'], ['unstarted', 'Not started'], ['complete', 'Complete']]
 
-function booksControlsHTML(state, books, query) {
-  const counts = Object.fromEntries(SHELVES.map(([id]) => [id, id === 'all' ? books.length : books.filter(b => b.shelf === id).length]))
-  const f = state.filters
-  const n = activeFilterCount(f)
-  const chips = [
-    ...f.genres.map(g => [`genre:${g}`, g]),
-    f.minRating && ['rating', f.minRating === 5 ? '5 stars' : `${f.minRating}+ stars`],
-    ...f.years.map(y => [`year:${y}`, `Read in ${y}`]),
-    f.series !== 'any' && ['series', f.series === 'yes' ? 'In a series' : 'Standalone'],
-  ].filter(Boolean)
+// One chip row (shelves + Series) and a thin "count · sort" line
+function controlsHTML(state, books) {
+  const isSeries = state.segment === 'series'
+  const counts = Object.fromEntries(SHELVES.map(([id]) =>
+    [id, id === 'all' ? books.length : books.filter(b => b.shelf === id).length]))
+  const seriesCount = groupSeries(books).length
 
   return `
-    ${segmentHTML(state)}
     <div class="lib-chips">
       ${SHELVES.map(([id, label]) => `
-        <button class="chip ${state.shelf === id ? 'selected' : ''}" data-shelf="${id}">
+        <button class="chip ${!isSeries && state.shelf === id ? 'selected' : ''}" data-shelf="${id}">
           ${label}${counts[id] ? ` <span class="lib-chip-count">${counts[id]}</span>` : ''}
         </button>`).join('')}
-    </div>
-    <div class="lib-toolbar">
-      <label class="lib-sort">
-        <span class="material-symbols-rounded">swap_vert</span>
-        <select id="lib-sort" aria-label="Sort by">
-          ${Object.entries(SORTS).map(([id, s]) => `<option value="${id}" ${state.sort === id ? 'selected' : ''}>${s.label}</option>`).join('')}
-        </select>
-        <span class="material-symbols-rounded lib-sort-caret">expand_more</span>
-      </label>
-      <button class="lib-filter-btn ${n ? 'active' : ''}" id="lib-filters">
-        <span class="material-symbols-rounded">tune</span>Filters${n ? ` · ${n}` : ''}
+      <button class="chip ${isSeries ? 'selected' : ''}" data-shelf="series">
+        Series${seriesCount ? ` <span class="lib-chip-count">${seriesCount}</span>` : ''}
       </button>
-      <div class="lib-layout" role="group" aria-label="Layout">
-        <button data-layout="grid" class="${state.layout === 'grid' ? 'selected' : ''}" aria-label="Grid">
-          <span class="material-symbols-rounded">grid_view</span>
-        </button>
-        <button data-layout="list" class="${state.layout === 'list' ? 'selected' : ''}" aria-label="List">
-          <span class="material-symbols-rounded">view_list</span>
-        </button>
-      </div>
     </div>
-    <div class="lib-active">
-      ${chips.map(([key, label]) => `
-        <button class="lib-active-chip" data-remove-filter="${esc(key)}">
-          ${esc(label)}<span class="material-symbols-rounded">close</span>
-        </button>`).join('')}
-      ${chips.length > 1 ? `<button class="lib-clear" id="lib-clear-filters">Clear all</button>` : ''}
+    <div class="lib-meta">
       <span class="lib-count" id="lib-count"></span>
-    </div>`
-}
-
-function seriesControlsHTML(state, books) {
-  const all = groupSeries(books)
-  const opts = [['all', 'All'], ['progress', 'In progress'], ['unstarted', 'Not started'], ['complete', 'Complete']]
-  return `
-    ${segmentHTML(state)}
-    <div class="lib-chips">
-      ${opts.map(([id, label]) => {
-        const n = all.filter(s => seriesMatches(s, id)).length
-        return `<button class="chip ${state.seriesFilter === id ? 'selected' : ''}" data-series-filter="${id}">
-          ${label}${n ? ` <span class="lib-chip-count">${n}</span>` : ''}</button>`
-      }).join('')}
+      ${isSeries
+        ? (state.seriesFilter !== 'all' ? `<span class="lib-meta-dot">·</span>
+            <button class="lib-sort-open" id="lib-sort-open">${SERIES_FILTERS.find(([id]) => id === state.seriesFilter)[1]}
+              <span class="material-symbols-rounded">expand_more</span></button>` : '')
+        : `<span class="lib-meta-dot">·</span>
+          <button class="lib-sort-open" id="lib-sort-open">${SORTS[state.sort].label}
+            <span class="material-symbols-rounded">expand_more</span></button>
+          <div class="lib-layout" role="group" aria-label="Layout">
+            <button data-layout="grid" class="${state.layout === 'grid' ? 'selected' : ''}" aria-label="Grid">
+              <span class="material-symbols-rounded">grid_view</span>
+            </button>
+            <button data-layout="list" class="${state.layout === 'list' ? 'selected' : ''}" aria-label="List">
+              <span class="material-symbols-rounded">view_list</span>
+            </button>
+          </div>`}
     </div>`
 }
 
@@ -423,9 +403,14 @@ function seriesCardHTML(s) {
     </div>`
 }
 
-// ── Filter sheet ──────────────────────────────────────────────────────────────
+// ── Sort & filter sheet ───────────────────────────────────────────────────────
 
-function openFilterSheet(books, state, onApply) {
+// Changes apply together when you tap the footer button. For the Series view
+// the sheet only offers the series status filter.
+function openSortFilterSheet(books, state, onApply) {
+  if (state.segment === 'series') return openSeriesFilterSheet(books, state, onApply)
+
+  let sort = state.sort
   let f = structuredClone(state.filters)
   const inShelf = books.filter(b => state.shelf === 'all' || b.shelf === state.shelf)
 
@@ -438,8 +423,15 @@ function openFilterSheet(books, state, onApply) {
   const { sheet, close } = openSheet(`
     <div class="filter-sheet">
       <div class="filter-sheet-head">
-        <h2>Filters</h2>
-        <button class="btn btn-text" id="filter-clear">Clear all</button>
+        <h2>Sort and filter</h2>
+        <button class="btn btn-text" id="filter-clear">Clear filters</button>
+      </div>
+
+      <div class="filter-group">
+        <div class="bd-label">Sort by</div>
+        <div class="chips" data-group="sort">
+          ${Object.entries(SORTS).map(([id, s]) => `<button class="chip" data-value="${id}">${s.label}</button>`).join('')}
+        </div>
       </div>
 
       <div class="filter-group">
@@ -486,13 +478,15 @@ function openFilterSheet(books, state, onApply) {
       const key = group.dataset.group
       group.querySelectorAll('.chip').forEach(chip => {
         const v = chip.dataset.value
-        const on = key === 'rating' ? Number(v) === f.minRating
+        const on = key === 'sort' ? v === sort
+          : key === 'rating' ? Number(v) === f.minRating
           : key === 'series' ? v === f.series
           : key === 'years' ? f.years.includes(Number(v))
           : f.genres.includes(v)
         chip.classList.toggle('selected', on)
       })
     })
+    sheet.querySelector('#filter-clear').disabled = !activeFilterCount(f)
     const n = filterBooks(books, state, '', f).length
     sheet.querySelector('#filter-apply').textContent = `Show ${n} book${n === 1 ? '' : 's'}`
   }
@@ -503,6 +497,7 @@ function openFilterSheet(books, state, onApply) {
     if (chip) {
       const key = chip.closest('[data-group]').dataset.group
       const v = chip.dataset.value
+      if (key === 'sort') sort = v
       if (key === 'rating') f.minRating = Number(v)
       if (key === 'series') f.series = v
       if (key === 'years') {
@@ -518,6 +513,34 @@ function openFilterSheet(books, state, onApply) {
       return
     }
     if (e.target.closest('#filter-clear')) { f = structuredClone(NO_FILTERS); return sync() }
-    if (e.target.closest('#filter-apply')) { onApply(f); close() }
+    if (e.target.closest('#filter-apply')) { onApply({ sort, filters: f }); close() }
+  })
+}
+
+function openSeriesFilterSheet(books, state, onApply) {
+  const all = groupSeries(books)
+  const { sheet, close } = openSheet(`
+    <div class="filter-sheet">
+      <div class="filter-sheet-head"><h2>Filter series</h2></div>
+      <div class="filter-group">
+        <div class="bd-label">Show</div>
+        <div class="chips">
+          ${SERIES_FILTERS.map(([id, label]) => {
+            const n = all.filter(s => seriesMatches(s, id)).length
+            return `<button class="chip ${state.seriesFilter === id ? 'selected' : ''}" data-series-filter="${id}">
+              ${label} <span class="lib-chip-count">${n}</span></button>`
+          }).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="height:16px"></div>
+  `, { className: 'filter-sheet-wrap' })
+
+  // A single choice — apply straight away
+  sheet.addEventListener('click', e => {
+    const chip = e.target.closest('[data-series-filter]')
+    if (!chip) return
+    onApply({ seriesFilter: chip.dataset.seriesFilter })
+    close()
   })
 }

@@ -3433,3 +3433,81 @@ html, body {
   padding: 0 4px;
   background: var(--md-primary-container);
 }
+
+/* ── Library: condensed controls ── */
+/* Sort & filter lives inside the search bar */
+.lib-filter-icon {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lib-filter-icon:active { background: color-mix(in srgb, var(--md-on-surface) 10%, transparent); }
+.lib-filter-icon.active {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
+.lib-filter-icon.active .material-symbols-rounded { color: inherit; }
+.lib-filter-badge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent-text);
+  color: var(--md-surface-container-lowest);
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
+}
+.lib-filter-badge[hidden] { display: none; }
+
+.lib-controls { padding: 10px 16px 0; }
+
+/* Thin "789 books · Date finished ▾ … grid/list" line */
+.lib-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--md-on-surface-variant);
+}
+.lib-meta .lib-count { margin-left: 0; }
+.lib-meta-dot { opacity: 0.6; }
+.lib-sort-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 4px 2px 4px 4px;
+  margin-left: -4px;
+  border: none;
+  border-radius: var(--md-shape-sm);
+  background: none;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--md-on-surface);
+  cursor: pointer;
+}
+.lib-sort-open .material-symbols-rounded { font-size: 18px; }
+.lib-sort-open:active { background: var(--md-surface-container); }
+.lib-meta .lib-layout { border: none; gap: 2px; }
+.lib-meta .lib-layout button { width: 34px; height: 30px; border-radius: var(--md-shape-sm); }
+
+/* Let the search field shrink so extra icons never push the avatar off-screen */
+.shelves-search-bar { min-width: 0; }
+.shelves-search-bar .search-input { min-width: 0; width: 100%; }
