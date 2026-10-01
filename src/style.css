@@ -124,6 +124,9 @@ html, body {
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
+  /* Keep content below the status bar / notch (black-translucent + viewport-fit=cover) */
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--md-background);
 }
 
 .view-container {
@@ -762,7 +765,7 @@ html, body {
   border-radius: var(--md-shape-xl) var(--md-shape-xl) 0 0;
   z-index: 101;
   padding-bottom: env(safe-area-inset-bottom, 16px);
-  max-height: 92dvh;
+  max-height: calc(92dvh - env(safe-area-inset-top, 0px));
   overflow-y: auto;
   animation: sheetUp var(--md-duration-medium) var(--md-motion-decelerate) forwards;
 }
