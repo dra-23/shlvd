@@ -1,6 +1,8 @@
 import './style.css'
 import { auth, onAuthStateChanged } from './firebase.js'
 import { initCoverFix } from './cover-fix.js'
+import { applyTheme } from './theme.js'
+applyTheme()
 initCoverFix()
 import { renderAuth } from './views/auth.js'
 import { renderShelves, destroyShelves } from './views/shelves.js'

@@ -2,6 +2,7 @@ import { esc } from '../escape.js'
 import { watchBotm, watchAllBooks } from '../db.js'
 import { backHandlerStack } from '../main.js'
 import { Chart, registerables } from 'chart.js'
+import { chartColors } from '../theme.js'
 
 Chart.register(...registerables)
 
@@ -305,6 +306,8 @@ function buildPageHTML(book, monthLabel, monthBooks) {
 
 function mountMonthCharts(el, books) {
   const instances = []
+  Object.assign(C, chartColors())
+  Chart.defaults.color = C.text
 
   // Doughnut — ratings
   const rCtx = el.querySelector('#botm-chart-ratings')
@@ -462,8 +465,8 @@ function mountMonthCharts(el, books) {
 
 function tooltipStyle() {
   return {
-    backgroundColor: '#fff',
-    titleColor: '#1a1c18',
+    backgroundColor: C.tooltipBg,
+    titleColor: C.tooltipTitle,
     bodyColor: C.text,
     borderColor: C.grid,
     borderWidth: 1,

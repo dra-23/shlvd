@@ -6,6 +6,7 @@ import { showSnackbar } from './shelves.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
 import { backHandlerStack } from '../main.js'
 import { Chart, registerables } from 'chart.js'
+import { chartColors, getThemePref, setThemePref } from '../theme.js'
 
 Chart.register(...registerables)
 Chart.defaults.font.family = 'Nunito, system-ui, sans-serif'
@@ -70,7 +71,18 @@ export function renderProfile(container) {
 
   initFixTitles(container)
 
-  return () => { unsub(); killCharts() }
+  container.querySelector('#theme-chips').addEventListener('click', e => {
+    const chip = e.target.closest('[data-theme-pref]')
+    if (!chip) return
+    container.querySelectorAll('[data-theme-pref]').forEach(c => c.classList.toggle('selected', c === chip))
+    setThemePref(chip.dataset.themePref)
+  })
+
+  // Charts bake in their colours, so redraw them when the theme flips
+  const onThemeChange = () => { if (allBooks.length) buildCharts(container, allBooks) }
+  window.addEventListener('themechange', onThemeChange)
+
+  return () => { unsub(); killCharts(); window.removeEventListener('themechange', onThemeChange) }
 }
 
 // ── Fix date-mangled titles ───────────────────────────────────────────────────
@@ -216,6 +228,8 @@ function updateStats(container, books) {
 
 function buildCharts(container, books) {
   killCharts()
+  Object.assign(C, chartColors())
+  Chart.defaults.color = C.text
   // Animate chart section into view on first data load
   const section = container.querySelector('.chart-section')
   if (section && !section.classList.contains('charts-shown')) {
@@ -412,8 +426,8 @@ function chartGenreBreakdown(container, books) {
 
 function tooltipStyle() {
   return {
-    backgroundColor: '#fff',
-    titleColor: '#1a1c18',
+    backgroundColor: C.tooltipBg,
+    titleColor: C.tooltipTitle,
     bodyColor: C.text,
     borderColor: C.grid,
     borderWidth: 1,
@@ -775,6 +789,19 @@ function buildHTML(user) {
             </button>
           </div>
           <div id="cal-grid" class="cal-grid"></div>
+        </div>
+      </div>
+
+      <div class="appearance-section">
+        <div class="chart-card">
+          <div class="chart-title">Appearance</div>
+          <div class="chips" id="theme-chips">
+            ${[['system', 'brightness_auto', 'System'], ['light', 'light_mode', 'Light'], ['dark', 'dark_mode', 'Dark']]
+              .map(([id, icon, label]) => `
+                <button class="chip ${getThemePref() === id ? 'selected' : ''}" data-theme-pref="${id}">
+                  <span class="material-symbols-rounded">${icon}</span>${label}
+                </button>`).join('')}
+          </div>
         </div>
       </div>
 

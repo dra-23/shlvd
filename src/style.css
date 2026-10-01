@@ -80,6 +80,73 @@
   --md-duration-short:         150ms;
   --md-duration-medium:        300ms;
   --md-duration-long:          500ms;
+
+  /* Badge toggles (BotM gold, BotY indigo) */
+  --botm-active-bg:   #FFF8E1;
+  --botm-active-text: #8B6000;
+  --boty-active-bg:   #ededf8;
+  --boty-active-text: #3949ab;
+
+  color-scheme: light;
+}
+
+/* ── M3 Color Tokens (Dark) ──────────────────────────── */
+/* Containers step lighter than the background so cards still read as raised */
+:root[data-theme="dark"] {
+  --md-primary:              #b4cba1;
+  --md-on-primary:           #213518;
+  --md-primary-container:    #3a4d2f;
+  --md-on-primary-container: #d3e9c2;
+
+  --md-secondary:              #bccbb0;
+  --md-on-secondary:           #263422;
+  --md-secondary-container:    #3c4b36;
+  --md-on-secondary-container: #d8eccc;
+
+  --md-tertiary:              #e3b9b4;
+  --md-on-tertiary:           #442624;
+  --md-tertiary-container:    #5d3c39;
+  --md-on-tertiary-container: #ffdad6;
+
+  --md-error:              #ffb4ab;
+  --md-on-error:           #690005;
+  --md-error-container:    #93000a;
+  --md-on-error-container: #ffdad6;
+
+  --md-background:         #121411;
+  --md-on-background:      #e2e3dc;
+
+  --md-surface:            #121411;
+  --md-on-surface:         #e2e3dc;
+  --md-surface-variant:    #42493e;
+  --md-on-surface-variant: #c2c9bb;
+
+  --md-outline:            #8c9387;
+  --md-outline-variant:    #42493e;
+
+  --md-surface-container-lowest:  #1c1f1a;
+  --md-surface-container-low:     #1f221d;
+  --md-surface-container:         #232620;
+  --md-surface-container-high:    #2b2e28;
+  --md-surface-container-highest: #353832;
+
+  --md-inverse-surface:    #e2e3dc;
+  --md-inverse-on-surface: #2f312d;
+  --md-inverse-primary:    #52663f;
+
+  --custom-shelf-card: #5e5242;
+  --md-on-custom-shelf-card: #f0e6d8;
+
+  --md-elevation-1: 0 1px 2px rgba(0,0,0,.40), 0 1px 3px 1px rgba(0,0,0,.25);
+  --md-elevation-2: 0 1px 2px rgba(0,0,0,.45), 0 2px 6px 2px rgba(0,0,0,.30);
+  --md-elevation-3: 0 4px 8px 3px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.45);
+
+  --botm-active-bg:   #3d3216;
+  --botm-active-text: #ffd27a;
+  --boty-active-bg:   #262a4a;
+  --boty-active-text: #c5cbff;
+
+  color-scheme: dark;
 }
 
 /* ── Reset & Base ────────────────────────────────────── */
@@ -1092,6 +1159,10 @@ html, body {
   letter-spacing: 0.5px;
 }
 
+.appearance-section {
+  padding: 0 16px 8px;
+}
+
 .profile-actions {
   padding: 8px 16px 24px;
   display: flex;
@@ -1291,9 +1362,9 @@ html, body {
 }
 
 .botm-toggle-btn.active {
-  background: #FFF8E1;
+  background: var(--botm-active-bg);
   border-color: #F5A623;
-  color: #8B6000;
+  color: var(--botm-active-text);
 }
 
 .botm-toggle-btn.active .material-symbols-rounded {
@@ -1483,8 +1554,8 @@ html, body {
 
 .boty-toggle-btn.active {
   border-color: #5c6bc0;
-  background: #ededf8;
-  color: #3949ab;
+  background: var(--boty-active-bg);
+  color: var(--boty-active-text);
 }
 
 .boty-toggle-btn.active .material-symbols-rounded {
