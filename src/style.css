@@ -549,12 +549,6 @@ html, body {
 }
 
 /* ── Tab panels ──────────────────────────────────────── */
-#shelves-content {
-  overflow: hidden;
-  flex: 1;
-  position: relative;
-}
-
 .shelf-panels-wrapper {
   display: flex;
   height: 100%;
