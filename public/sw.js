@@ -1,4 +1,9 @@
-const CACHE = 'shlvd-v3'
+const CACHE = 'shlvd-v4'
+
+// Google Fonts responses are opaque (no-cors) but safe to cache — without
+// them the icons render as plain words when offline
+const isFont = url =>
+  url.startsWith('https://fonts.googleapis.com/') || url.startsWith('https://fonts.gstatic.com/')
 
 self.addEventListener('install', () => self.skipWaiting())
 
@@ -43,7 +48,8 @@ self.addEventListener('fetch', e => {
     caches.match(e.request).then(cached => {
       if (cached) return cached
       return fetch(e.request).then(res => {
-        if (!res || res.status !== 200 || res.type === 'opaque') return res
+        const cacheable = res && (res.status === 200 || (res.type === 'opaque' && isFont(url)))
+        if (!cacheable) return res
         const clone = res.clone()
         caches.open(CACHE).then(c => c.put(e.request, clone))
         return res

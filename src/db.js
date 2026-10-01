@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromCache,
   getDocs,
   setDoc,
   updateDoc,
@@ -14,6 +15,16 @@ import {
 } from 'firebase/firestore'
 
 const booksCol = () => collection(db, 'books')
+
+// Firestore applies writes to the local cache immediately, but the promise
+// only settles once the server confirms. Don't leave the UI waiting on that
+// when offline (or on a connection that has stalled) — the write is queued
+// and syncs automatically when the connection is back.
+function commit(write) {
+  const logged = write.catch(err => { console.error('Write failed', err); throw err })
+  if (!navigator.onLine) { logged.catch(() => {}); return Promise.resolve() }
+  return Promise.race([logged, new Promise(r => setTimeout(r, 3000))])
+}
 
 // Convert Firestore Timestamp or plain object to JS Date
 function toDate(ts) {
@@ -61,7 +72,7 @@ function normalizeStatus(status) {
 /** Add a new book (written in the existing schema format) */
 export const addBook = async (bookData) => {
   const ref = doc(booksCol(), bookData.googleBooksId)
-  await setDoc(ref, {
+  await commit(setDoc(ref, {
     title:         bookData.title,
     author:        bookData.author,
     cover:         bookData.thumbnail || '',
@@ -80,7 +91,7 @@ export const addBook = async (bookData) => {
     libraryId:     bookData.googleBooksId,
     dateCompleted: bookData.shelf === 'read' ? serverTimestamp() : null,
     addedAt:       serverTimestamp(),
-  })
+  }))
 }
 
 /** Update fields on an existing book */
@@ -100,20 +111,20 @@ export const updateBook = async (id, updates) => {
   if ('seriesNumber'  in updates) dbUpdates.seriesNumber  = updates.seriesNumber
   if ('thumbnail'     in updates) dbUpdates.cover         = updates.thumbnail
   if ('dateCompleted' in updates) dbUpdates.dateCompleted = updates.dateCompleted
-  await updateDoc(ref, dbUpdates)
+  await commit(updateDoc(ref, dbUpdates))
 }
 
 /** Remove a book — returns its raw data so the removal can be undone */
 export const removeBook = async (id) => {
   const ref = doc(booksCol(), id)
-  const snap = await getDoc(ref)
-  await deleteDoc(ref)
+  const snap = await getDocFromCache(ref).catch(() => getDoc(ref))
+  await commit(deleteDoc(ref))
   return snap.exists() ? snap.data() : null
 }
 
 /** Put back a book removed with removeBook, exactly as it was */
 export const restoreBook = async (id, data) => {
-  await setDoc(doc(booksCol(), id), data)
+  await commit(setDoc(doc(booksCol(), id), data))
 }
 
 /** Get a single book */
@@ -150,10 +161,10 @@ export const setBOTY = async (bookId, year) => {
   await Promise.all(
     snap.docs
       .filter(d => d.data().botyYear === year && d.id !== bookId)
-      .map(d => updateDoc(d.ref, { isBOTY: false, botyYear: null }))
+      .map(d => commit(updateDoc(d.ref, { isBOTY: false, botyYear: null })))
   )
   if (bookId) {
-    await updateDoc(doc(booksCol(), bookId), { isBOTY: true, botyYear: year })
+    await commit(updateDoc(doc(booksCol(), bookId), { isBOTY: true, botyYear: year }))
   }
 }
 
@@ -171,3 +182,17 @@ export const watchAllBooks = (callback) => {
     callback(snap.docs.map(d => normalize(d.id, d.data())))
   )
 }
+
+// ── Library settings (settings/library) ─────────────────────────────────────
+
+const settingsRef = () => doc(db, 'settings', 'library')
+
+/** Real-time listener for yearly reading goals: { [year]: bookCount } */
+export const watchReadingGoals = (callback, onError) =>
+  onSnapshot(settingsRef(),
+    snap => callback(snap.data()?.readingGoals || {}),
+    err => { console.error(err); onError?.(err) })
+
+/** Set (or clear, with 0) the reading goal for a year */
+export const setReadingGoal = (year, count) =>
+  commit(setDoc(settingsRef(), { readingGoals: { [year]: count } }, { merge: true }))

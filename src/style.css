@@ -1163,6 +1163,86 @@ html, body {
   padding: 0 16px 8px;
 }
 
+/* ── Reading goal (Profile) ──────────────────────────── */
+.goal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -8px -8px 4px 0;
+}
+.goal-header .icon-btn { width: 40px; height: 40px; }
+.goal-header .icon-btn .material-symbols-rounded { font-size: 20px; }
+.goal-body {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-bottom: 4px;
+}
+.goal-ring { width: 120px; height: 120px; flex-shrink: 0; }
+.goal-ring circle { fill: none; stroke-width: 12; }
+.goal-ring-track { stroke: var(--md-surface-container-high); }
+.goal-ring-progress {
+  stroke: var(--md-primary);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 60px 60px;
+  transition: stroke-dashoffset 900ms var(--md-motion-decelerate);
+}
+.goal-ring-progress.done { stroke: #F5A623; }
+.goal-ring-count {
+  font-size: 30px;
+  font-weight: 800;
+  fill: var(--md-on-surface);
+  text-anchor: middle;
+}
+.goal-ring-of {
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--md-on-surface-variant);
+  text-anchor: middle;
+}
+.goal-text { min-width: 0; }
+.goal-headline {
+  font-size: 1.0625rem;
+  font-weight: 800;
+  color: var(--md-on-surface);
+  line-height: 1.3;
+  margin-bottom: 6px;
+}
+.goal-status {
+  font-size: 0.8125rem;
+  color: var(--md-on-surface-variant);
+  line-height: 1.4;
+}
+.goal-status.done { color: var(--md-on-surface); font-weight: 700; }
+.goal-empty {
+  font-size: 0.875rem;
+  color: var(--md-on-surface-variant);
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+.goal-edit-label {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--md-on-surface-variant);
+  margin-bottom: 10px;
+}
+.goal-edit-row { display: flex; gap: 8px; align-items: center; }
+.goal-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: 1rem;
+}
+.goal-edit-row .btn { padding: 0 14px; flex-shrink: 0; }
+.goal-remove { margin-top: 8px; padding: 0 4px; color: var(--md-error); }
+
 .profile-actions {
   padding: 8px 16px 24px;
   display: flex;

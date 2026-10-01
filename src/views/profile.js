@@ -3,6 +3,7 @@ import { auth, signOutUser } from '../firebase.js'
 import { watchAllBooks, getBook, updateBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
+import { mountReadingGoal } from './reading-goal.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
 import { backHandlerStack } from '../main.js'
 import { Chart, registerables } from 'chart.js'
@@ -60,8 +61,11 @@ export function renderProfile(container) {
     openYearInReview(allBooks)
   })
 
+  const goal = mountReadingGoal(container.querySelector('#goal-card'))
+
   const unsub = watchAllBooks(books => {
     allBooks = books
+    goal.update(books)
     calendarBooks = books.filter(b => b.shelf === 'read' && b.dateCompleted)
     updateStats(container, books)
     buildCharts(container, books)
@@ -82,7 +86,10 @@ export function renderProfile(container) {
   const onThemeChange = () => { if (allBooks.length) buildCharts(container, allBooks) }
   window.addEventListener('themechange', onThemeChange)
 
-  return () => { unsub(); killCharts(); window.removeEventListener('themechange', onThemeChange) }
+  return () => {
+    unsub(); goal.destroy(); killCharts()
+    window.removeEventListener('themechange', onThemeChange)
+  }
 }
 
 // ── Fix date-mangled titles ───────────────────────────────────────────────────
@@ -746,6 +753,7 @@ function buildHTML(user) {
       </div>
 
       <div class="chart-section">
+        <div class="chart-card goal-card" id="goal-card"></div>
         <div class="chart-card">
           <div class="chart-title">Books Read by Year</div>
           <canvas id="chart-year"></canvas>
