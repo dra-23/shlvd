@@ -2028,6 +2028,45 @@ html, body {
 
 .botm-card:active { transform: scale(0.98); box-shadow: none; }
 
+/* Months with several picks share a row: one card expanded, the rest
+   collapsed to their cover. Column widths are set inline by botm.js. */
+.botm-duo {
+  display: grid;
+  gap: 8px;
+  margin: 8px 16px;
+  transition: grid-template-columns 320ms var(--md-motion-emphasized);
+}
+.botm-duo .botm-card {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+/* Keep the text from re-wrapping while the column animates */
+.botm-duo .botm-info {
+  min-width: 132px;
+  transition: opacity 200ms var(--md-motion-standard);
+}
+.botm-duo .botm-card.collapsed {
+  justify-content: center;
+  gap: 0;
+  padding: 12px;
+}
+.botm-duo .botm-card.collapsed .botm-info,
+.botm-duo .botm-card.collapsed .botm-chevron,
+.botm-duo .botm-card.collapsed .botm-boty-icon {
+  opacity: 0;
+  width: 0;
+  min-width: 0;
+  flex: 0 0 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.botm-duo .botm-card.expanded .botm-info { transition-delay: 120ms; }
+.botm-duo .botm-card.collapsed .botm-cover-wrap { box-shadow: var(--md-elevation-1); }
+@media (prefers-reduced-motion: reduce) {
+  .botm-duo, .botm-duo .botm-info { transition: none; }
+}
+
 .botm-cover-wrap {
   width: 72px;
   height: 104px;

@@ -104,6 +104,9 @@ export function renderBotm(container) {
 
   content.addEventListener('click', e => {
     const card = e.target.closest('[data-index]')
+    // In a shared-month row, the first tap on a collapsed card just expands it
+    const row = card?.closest('.botm-duo')
+    if (row && !card.classList.contains('expanded')) return expandDuoCard(row, card)
     if (card) return openBotmPage(Number(card.dataset.index), container)
     const boty = e.target.closest('[data-boty-id]')
     if (boty) {
@@ -173,7 +176,9 @@ function buildListHTML(picks, allBooks) {
       const k = `${y}-${m}`
       const monthPicks = picksByMonth.get(k)
       if (monthPicks) {
-        html += monthPicks.map(b => botmCardHTML(b, indexOf(b))).join('')
+        html += monthPicks.length > 1
+          ? duoRowHTML(monthPicks, indexOf)
+          : botmCardHTML(monthPicks[0], indexOf(monthPicks[0]))
       } else {
         html += emptySlotHTML(y, m, readByMonth.get(k) || 0, y === now.getFullYear() && m === now.getMonth())
       }
@@ -187,6 +192,36 @@ function buildListHTML(picks, allBooks) {
       <div class="botm-list">${undated.map(b => botmCardHTML(b, indexOf(b))).join('')}</div>`
   }
   return html
+}
+
+// ── Months with more than one pick: one row, one card expanded ───────────────
+
+// Collapsed cards shrink to their cover. Widths are plain px/% (not fr) so
+// the browser can animate the columns when a different card expands.
+const DUO_COLLAPSED = 96
+const DUO_GAP = 8
+
+function duoColumns(count, expandedAt) {
+  const rest = (count - 1) * (DUO_COLLAPSED + DUO_GAP)
+  return Array.from({ length: count }, (_, i) =>
+    i === expandedAt ? `calc(100% - ${rest}px)` : `${DUO_COLLAPSED}px`).join(' ')
+}
+
+function duoRowHTML(picks, indexOf) {
+  return `
+    <div class="botm-duo" style="grid-template-columns:${duoColumns(picks.length, 0)}">
+      ${picks.map((b, i) => botmCardHTML(b, indexOf(b), i === 0 ? 'expanded' : 'collapsed')).join('')}
+    </div>`
+}
+
+function expandDuoCard(row, card) {
+  const cards = [...row.querySelectorAll('.botm-card')]
+  cards.forEach(c => {
+    c.classList.toggle('expanded', c === card)
+    c.classList.toggle('collapsed', c !== card)
+    c.setAttribute('aria-expanded', c === card)
+  })
+  row.style.gridTemplateColumns = duoColumns(cards.length, cards.indexOf(card))
 }
 
 function botySpotlightHTML(year, yearPicks, allBooks) {
@@ -776,7 +811,8 @@ function tooltipStyle() {
 
 // ── BotM list helpers ─────────────────────────────────────────────────────────
 
-function botmCardHTML(book, index) {
+// state: undefined for a normal card, or 'expanded' / 'collapsed' inside a shared-month row
+function botmCardHTML(book, index, state) {
   const month = formatMonth(book.dateCompleted)
 
   const coverHTML = book.thumbnail
@@ -789,7 +825,8 @@ function botmCardHTML(book, index) {
        </div>`
 
   return `
-    <div class="botm-card" data-index="${index}" role="button" tabindex="0">
+    <div class="botm-card ${state || ''}" data-index="${index}" role="button" tabindex="0"
+      ${state ? `aria-expanded="${state === 'expanded'}"` : ''}>
       <div class="botm-cover-wrap">${coverHTML}</div>
       <div class="botm-info">
         ${month ? `<div class="botm-month-badge">${month}</div>` : ''}
