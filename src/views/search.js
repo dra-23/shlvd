@@ -2,6 +2,7 @@ import { esc } from '../escape.js'
 import { searchBooks } from '../books-api.js'
 import { getBook } from '../db.js'
 import { openBookDetail, openManualAdd } from './book-detail.js'
+import { avatarButtonHTML, wireAvatar } from './topbar.js'
 
 const SHELF_BADGE = { want: 'Want', reading: 'Reading', read: 'Read' }
 
@@ -28,6 +29,7 @@ export function renderSearch(container) {
             <span class="material-symbols-rounded">close</span>
           </button>
         </div>
+        ${avatarButtonHTML()}
       </div>
 
       <div id="search-results" style="flex:1; overflow-y:auto; padding-top: 8px;"></div>
@@ -42,6 +44,7 @@ export function renderSearch(container) {
     </div>
   `
 
+  wireAvatar(container)
   const input   = container.querySelector('#search-input')
   const clearBtn = container.querySelector('#clear-btn')
   const results = container.querySelector('#search-results')

@@ -54,6 +54,8 @@ export function renderProfile(container) {
   container.innerHTML = buildHTML(user)
 
   container.querySelector('#sign-out-btn').addEventListener('click', () => signOutUser())
+  // Profile is opened from the avatar, so Back returns to whichever tab you came from
+  container.querySelector('#profile-back').addEventListener('click', () => history.back())
   initCalendar(container)
 
   let allBooks = []
@@ -717,6 +719,12 @@ function buildHTML(user) {
 
   return `
     <div class="profile-screen">
+      <div class="profile-bar">
+        <button class="icon-btn" id="profile-back" aria-label="Back">
+          <span class="material-symbols-rounded">arrow_back</span>
+        </button>
+        <span class="botm-page-title">Profile</span>
+      </div>
       <div class="profile-hero">
         <div class="profile-avatar">${avatarHTML}</div>
         <div class="profile-name">${esc(user?.displayName || 'Reader')}</div>

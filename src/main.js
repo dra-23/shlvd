@@ -9,6 +9,7 @@ import { renderShelves, destroyShelves } from './views/shelves.js'
 import { renderSearch, destroySearch } from './views/search.js'
 import { renderProfile, destroyProfile } from './views/profile.js'
 import { renderBotm, destroyBotm } from './views/botm.js'
+import { renderLibrary } from './views/library.js'
 
 // Register service worker in production only — skip during local dev
 // so that git pull + npm run dev always shows fresh changes on refresh
@@ -49,11 +50,13 @@ window.addEventListener('popstate', (e) => {
   }
 })
 
+// 'shelves' is the Home tab; the library tab is labelled Shlvd.
+// Profile isn't a tab — it opens from the avatar in each top bar.
 const TAB_CONFIG = [
-  { id: 'shelves', icon: 'auto_stories', label: 'Shlvd' },
-  { id: 'search',  icon: 'search',       label: 'Search'  },
-  { id: 'botm',    icon: 'workspace_premium', label: 'BotM'    },
-  { id: 'profile', icon: 'person',       label: 'Profile' },
+  { id: 'shelves', icon: 'home',              label: 'Home'   },
+  { id: 'library', icon: 'auto_stories',      label: 'Shlvd'  },
+  { id: 'search',  icon: 'search',            label: 'Search' },
+  { id: 'botm',    icon: 'workspace_premium', label: 'BotM'   },
 ]
 
 // ── Shell template ───────────────────────────────────────────────────────────
@@ -118,6 +121,7 @@ function swapView(tab) {
 function mountView(tab, el) {
   switch (tab) {
     case 'shelves': return renderShelves(el)
+    case 'library': return renderLibrary(el)
     case 'search':  return renderSearch(el)
     case 'botm':    return renderBotm(el)
     case 'profile': return renderProfile(el)

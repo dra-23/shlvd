@@ -3,6 +3,7 @@ import { watchBotm, watchAllBooks, updateBook } from '../db.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
+import { avatarButtonHTML, wireAvatar } from './topbar.js'
 import { Chart, registerables } from 'chart.js'
 import { chartColors } from '../theme.js'
 
@@ -70,6 +71,7 @@ export function renderBotm(container) {
         <div style="height:56px;display:flex;align-items:center;margin-left:12px;">
           <span class="top-bar-title" style="margin:0;">Book of the Month</span>
         </div>
+        <span style="margin-left:auto">${avatarButtonHTML()}</span>
       </div>
 
       <div id="botm-content" style="padding:0 0 16px;flex:1;overflow-y:auto;">
@@ -80,6 +82,7 @@ export function renderBotm(container) {
     </div>
   `
 
+  wireAvatar(container)
   const content = container.querySelector('#botm-content')
   let picks = null, allBooks = null
 

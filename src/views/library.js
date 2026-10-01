@@ -1,0 +1,523 @@
+import { esc } from '../escape.js'
+import { watchAllBooks } from '../db.js'
+import { openBookDetail } from './book-detail.js'
+import { navigateTo } from '../main.js'
+import { avatarButtonHTML, wireAvatar } from './topbar.js'
+import { openSheet } from './sheet.js'
+import { bookCardHTML, coverImgHTML, groupSeries, SHELF_BADGE } from './shelves.js'
+
+// Library tab ("Shlvd"): every book, with shelf chips, sort, filters and a
+// grid/list toggle, plus a Series view. The last view is remembered per device.
+
+const STATE_KEY = 'shlvd-library'
+const NO_FILTERS = { genres: [], minRating: 0, years: [], series: 'any' }
+const DEFAULT_STATE = {
+  segment: 'books', shelf: 'all', sort: 'finished', layout: 'grid',
+  filters: NO_FILTERS, seriesFilter: 'all',
+}
+const PAGE = 60 // books rendered per chunk as you scroll
+
+const SHELVES = [['all', 'All'], ['reading', 'Reading'], ['want', 'TBR'], ['read', 'Read'], ['dnf', 'DNF']]
+
+const monthLabel = d => d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+const time = d => d?.getTime?.() ?? 0
+// "The Unknown" sorts under U, "’Salem’s Lot" under S
+const sortTitle = b => b.title.replace(/^[^\p{L}\p{N}]+/u, '').replace(/^(the|a|an)\s+/i, '')
+const initial = s => /^[a-z]/i.test(s) ? s[0].toUpperCase() : '#'
+// Number-aware, so "1st to Die" comes before "10th Anniversary"
+const collate = (x, y) => x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' })
+const yearOf = b => Number(String(b.dateReleased).match(/\d{4}/)?.[0]) || 0
+
+const SORTS = {
+  finished:  { label: 'Date finished', cmp: (a, b) => time(b.dateCompleted) - time(a.dateCompleted),
+               group: b => b.dateCompleted ? monthLabel(b.dateCompleted) : 'Not finished' },
+  added:     { label: 'Date added', cmp: (a, b) => time(b.addedAt) - time(a.addedAt),
+               group: b => b.addedAt ? monthLabel(b.addedAt) : 'Unknown' },
+  title:     { label: 'Title', cmp: (a, b) => collate(sortTitle(a), sortTitle(b)),
+               group: b => initial(sortTitle(b)) },
+  author:    { label: 'Author', cmp: (a, b) => collate(a.author, b.author) || collate(sortTitle(a), sortTitle(b)),
+               group: b => initial(b.author) },
+  rating:    { label: 'Rating', cmp: (a, b) => (b.rating || 0) - (a.rating || 0) || time(b.dateCompleted) - time(a.dateCompleted),
+               group: b => b.rating ? `${b.rating} star${b.rating > 1 ? 's' : ''}` : 'Unrated' },
+  published: { label: 'Published', cmp: (a, b) => yearOf(b) - yearOf(a),
+               group: b => yearOf(b) ? String(yearOf(b)) : 'Unknown' },
+}
+
+function loadState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STATE_KEY) || '{}')
+    return { ...DEFAULT_STATE, ...saved, filters: { ...NO_FILTERS, ...saved.filters } }
+  } catch { return { ...DEFAULT_STATE } }
+}
+function saveState(state) {
+  try { localStorage.setItem(STATE_KEY, JSON.stringify(state)) } catch {}
+}
+
+// Other tabs open the library pre-filtered ("See all 115" on Home, etc.)
+let activeLibrary = null
+let pendingPreset = null
+export function openLibrary(preset = {}) {
+  if (activeLibrary) return activeLibrary.applyPreset(preset)
+  pendingPreset = preset
+  navigateTo('library')
+}
+
+// ── View ──────────────────────────────────────────────────────────────────────
+
+export function renderLibrary(container) {
+  let state = loadState()
+  let books = []
+  let query = ''
+
+  container.innerHTML = `
+    <div class="shelves-root">
+      <div class="shelves-top">
+        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
+        <div class="search-bar shelves-search-bar">
+          <span class="material-symbols-rounded">search</span>
+          <input class="search-input" id="lib-search" type="search" enterkeyhint="search"
+            placeholder="Search your library…" autocomplete="off" />
+          <button class="icon-btn" id="lib-search-clear" style="display:none" aria-label="Clear search">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+        ${avatarButtonHTML()}
+      </div>
+      <div id="library-content" class="library-content">
+        <div class="lib-controls" id="lib-controls"></div>
+        <div id="lib-results"><div class="lib-loading">${'<div class="skeleton lib-skel"></div>'.repeat(6)}</div></div>
+      </div>
+    </div>
+  `
+  wireAvatar(container)
+  const content  = container.querySelector('#library-content')
+  const controls = container.querySelector('#lib-controls')
+  const results  = container.querySelector('#lib-results')
+  const search   = container.querySelector('#lib-search')
+  const clearBtn = container.querySelector('#lib-search-clear')
+
+  const update = (changes = {}, { keepScroll = false } = {}) => {
+    state = { ...state, ...changes }
+    saveState(state)
+    render(keepScroll)
+  }
+
+  // ── Rendering ─────────────────────────────────────────
+  let feed = null // progressive renderer for the current book list
+  let observer = null
+
+  function render(keepScroll) {
+    const prevCount = keepScroll && feed ? feed.rendered : 0
+    controls.innerHTML = state.segment === 'series' ? seriesControlsHTML(state, books, query) : booksControlsHTML(state, books, query)
+    if (!keepScroll) content.scrollTop = 0
+    if (state.segment === 'series') renderSeries()
+    else renderBooks(Math.max(PAGE, prevCount))
+  }
+
+  function renderBooks(initialCount) {
+    const list = filterBooks(books, state, query).sort(SORTS[state.sort].cmp)
+    const countEl = controls.querySelector('#lib-count')
+    if (countEl) countEl.textContent = `${list.length} book${list.length === 1 ? '' : 's'}`
+
+    if (!list.length) {
+      results.innerHTML = `
+        <div class="empty-state" style="padding-top:40px">
+          <span class="material-symbols-rounded">search_off</span>
+          <div class="empty-state-title">No books match</div>
+          <div class="empty-state-body">Try a different search or clear some filters.</div>
+        </div>`
+      return
+    }
+
+    // Group consecutive books by the sort's group label
+    const groups = []
+    list.forEach(b => {
+      const label = SORTS[state.sort].group(b)
+      if (groups.at(-1)?.label !== label) groups.push({ label, books: [] })
+      groups.at(-1).books.push(b)
+    })
+
+    results.innerHTML = ''
+    feed = { groups, g: 0, i: 0, rendered: 0, target: null }
+    appendBooks(initialCount)
+  }
+
+  // Append up to `count` more books, opening new group sections as needed
+  function appendBooks(count) {
+    const f = feed
+    let added = 0
+    while (added < count && f.g < f.groups.length) {
+      const group = f.groups[f.g]
+      if (f.i === 0) {
+        results.insertAdjacentHTML('beforeend', `
+          <div class="month-sticky-label lib-group-label">
+            <span>${esc(group.label)}</span><span class="lib-group-count">${group.books.length}</span>
+          </div>
+          <div class="${state.layout === 'grid' ? 'book-grid lib-grid' : 'lib-list'}"></div>`)
+        f.target = results.lastElementChild
+      }
+      const slice = group.books.slice(f.i, f.i + (count - added))
+      f.target.insertAdjacentHTML('beforeend',
+        slice.map(b => state.layout === 'grid' ? bookCardHTML(b) : listRowHTML(b, state.sort)).join(''))
+      f.i += slice.length
+      added += slice.length
+      if (f.i >= group.books.length) { f.g++; f.i = 0 }
+    }
+    f.rendered += added
+
+    // Sentinel near the end loads the next chunk
+    results.querySelector('.lib-sentinel')?.remove()
+    observer?.disconnect()
+    if (f.g < f.groups.length) {
+      results.insertAdjacentHTML('beforeend', '<div class="lib-sentinel"></div>')
+      observer = new IntersectionObserver(entries => {
+        if (entries.some(e => e.isIntersecting)) appendBooks(PAGE)
+      }, { root: content, rootMargin: '600px 0px' })
+      observer.observe(results.querySelector('.lib-sentinel'))
+    }
+  }
+
+  function renderSeries() {
+    feed = null
+    observer?.disconnect()
+    const q = query.toLowerCase()
+    const all = groupSeries(books).sort((a, b) => a.name.localeCompare(b.name))
+    const list = all
+      .filter(s => seriesMatches(s, state.seriesFilter))
+      .filter(s => !q || s.name.toLowerCase().includes(q) || s.books.some(b => b.title.toLowerCase().includes(q)))
+    results.innerHTML = list.length
+      ? `<div class="lib-series-list">${list.map(seriesCardHTML).join('')}</div>`
+      : `<div class="empty-state" style="padding-top:40px">
+           <span class="material-symbols-rounded">collections_bookmark</span>
+           <div class="empty-state-title">${all.length ? 'No series match' : 'No series yet'}</div>
+           <div class="empty-state-body">${all.length ? 'Try another filter.' : 'Add a series name when editing a book.'}</div>
+         </div>`
+  }
+
+  // ── Events ────────────────────────────────────────────
+  controls.addEventListener('click', e => {
+    const t = e.target
+    const seg = t.closest('[data-segment]')
+    if (seg) return update({ segment: seg.dataset.segment })
+    const shelf = t.closest('[data-shelf]')
+    if (shelf) return update({ shelf: shelf.dataset.shelf })
+    const layout = t.closest('[data-layout]')
+    if (layout) return update({ layout: layout.dataset.layout }, { keepScroll: true })
+    const sf = t.closest('[data-series-filter]')
+    if (sf) return update({ seriesFilter: sf.dataset.seriesFilter })
+    if (t.closest('#lib-filters')) return openFilterSheet(books, state, f => update({ filters: f }))
+    const chip = t.closest('[data-remove-filter]')
+    if (chip) {
+      const [key, value] = chip.dataset.removeFilter.split(':')
+      const f = { ...state.filters }
+      if (key === 'genre') f.genres = f.genres.filter(g => g !== value)
+      if (key === 'year') f.years = f.years.filter(y => String(y) !== value)
+      if (key === 'rating') f.minRating = 0
+      if (key === 'series') f.series = 'any'
+      return update({ filters: f })
+    }
+    if (t.closest('#lib-clear-filters')) return update({ filters: NO_FILTERS })
+  })
+  controls.addEventListener('change', e => {
+    if (e.target.id === 'lib-sort') update({ sort: e.target.value })
+  })
+
+  results.addEventListener('click', e => {
+    const expand = e.target.closest('.series-card-header')
+    if (expand) {
+      const card = expand.closest('.series-card')
+      const open = card.classList.toggle('open')
+      card.querySelector('.series-expand-btn .material-symbols-rounded').textContent = open ? 'expand_less' : 'expand_more'
+      return
+    }
+    const el = e.target.closest('.book-card, .lib-row, .series-book-row')
+    const book = el && books.find(b => b.id === el.dataset.bookId)
+    if (book) openBookDetail(book, book.shelf, null)
+  })
+
+  let searchTimer = null
+  search.addEventListener('input', () => {
+    clearBtn.style.display = search.value ? 'flex' : 'none'
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => { query = search.value.trim(); render(false) }, 150)
+  })
+  clearBtn.addEventListener('click', () => {
+    search.value = ''; query = ''; clearBtn.style.display = 'none'; render(false); search.focus()
+  })
+
+  // ── Presets from other tabs ───────────────────────────
+  function applyPreset(p) {
+    const changes = {}
+    if (p.segment) changes.segment = p.segment
+    if (p.shelf) Object.assign(changes, { segment: 'books', shelf: p.shelf, filters: NO_FILTERS })
+    if (p.sort) changes.sort = p.sort
+    if (Object.keys(changes).length) update(changes)
+    if (p.focusSearch) requestAnimationFrame(() => search.focus())
+  }
+
+  activeLibrary = { applyPreset }
+  if (pendingPreset) { applyPreset(pendingPreset); pendingPreset = null }
+
+  const unsub = watchAllBooks(b => {
+    const first = !books.length
+    books = b
+    render(!first) // later snapshots (edits) keep your place in the list
+  })
+
+  return () => {
+    unsub()
+    observer?.disconnect()
+    clearTimeout(searchTimer)
+    activeLibrary = null
+  }
+}
+
+// ── Filtering ─────────────────────────────────────────────────────────────────
+
+function filterBooks(books, state, query, filters = state.filters) {
+  const q = query.toLowerCase()
+  return books.filter(b =>
+    (state.shelf === 'all' || b.shelf === state.shelf) &&
+    (!filters.genres.length || filters.genres.includes(b.genre)) &&
+    (!filters.minRating || b.rating >= filters.minRating) &&
+    (!filters.years.length || (b.dateCompleted && filters.years.includes(b.dateCompleted.getFullYear()))) &&
+    (filters.series === 'any' || (filters.series === 'yes') === !!b.series) &&
+    (!q || b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q) || b.series.toLowerCase().includes(q)))
+}
+
+const activeFilterCount = f =>
+  f.genres.length + f.years.length + (f.minRating ? 1 : 0) + (f.series !== 'any' ? 1 : 0)
+
+function seriesMatches(s, filter) {
+  if (filter === 'progress') return s.read > 0 && s.read < s.total
+  if (filter === 'unstarted') return s.read === 0
+  if (filter === 'complete') return s.read === s.total
+  return true
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+
+function segmentHTML(state) {
+  return `
+    <div class="lib-segmented" role="tablist">
+      <button role="tab" data-segment="books" class="${state.segment === 'books' ? 'selected' : ''}">Books</button>
+      <button role="tab" data-segment="series" class="${state.segment === 'series' ? 'selected' : ''}">Series</button>
+    </div>`
+}
+
+function booksControlsHTML(state, books, query) {
+  const counts = Object.fromEntries(SHELVES.map(([id]) => [id, id === 'all' ? books.length : books.filter(b => b.shelf === id).length]))
+  const f = state.filters
+  const n = activeFilterCount(f)
+  const chips = [
+    ...f.genres.map(g => [`genre:${g}`, g]),
+    f.minRating && ['rating', f.minRating === 5 ? '5 stars' : `${f.minRating}+ stars`],
+    ...f.years.map(y => [`year:${y}`, `Read in ${y}`]),
+    f.series !== 'any' && ['series', f.series === 'yes' ? 'In a series' : 'Standalone'],
+  ].filter(Boolean)
+
+  return `
+    ${segmentHTML(state)}
+    <div class="lib-chips">
+      ${SHELVES.map(([id, label]) => `
+        <button class="chip ${state.shelf === id ? 'selected' : ''}" data-shelf="${id}">
+          ${label}${counts[id] ? ` <span class="lib-chip-count">${counts[id]}</span>` : ''}
+        </button>`).join('')}
+    </div>
+    <div class="lib-toolbar">
+      <label class="lib-sort">
+        <span class="material-symbols-rounded">swap_vert</span>
+        <select id="lib-sort" aria-label="Sort by">
+          ${Object.entries(SORTS).map(([id, s]) => `<option value="${id}" ${state.sort === id ? 'selected' : ''}>${s.label}</option>`).join('')}
+        </select>
+        <span class="material-symbols-rounded lib-sort-caret">expand_more</span>
+      </label>
+      <button class="lib-filter-btn ${n ? 'active' : ''}" id="lib-filters">
+        <span class="material-symbols-rounded">tune</span>Filters${n ? ` · ${n}` : ''}
+      </button>
+      <div class="lib-layout" role="group" aria-label="Layout">
+        <button data-layout="grid" class="${state.layout === 'grid' ? 'selected' : ''}" aria-label="Grid">
+          <span class="material-symbols-rounded">grid_view</span>
+        </button>
+        <button data-layout="list" class="${state.layout === 'list' ? 'selected' : ''}" aria-label="List">
+          <span class="material-symbols-rounded">view_list</span>
+        </button>
+      </div>
+    </div>
+    <div class="lib-active">
+      ${chips.map(([key, label]) => `
+        <button class="lib-active-chip" data-remove-filter="${esc(key)}">
+          ${esc(label)}<span class="material-symbols-rounded">close</span>
+        </button>`).join('')}
+      ${chips.length > 1 ? `<button class="lib-clear" id="lib-clear-filters">Clear all</button>` : ''}
+      <span class="lib-count" id="lib-count"></span>
+    </div>`
+}
+
+function seriesControlsHTML(state, books) {
+  const all = groupSeries(books)
+  const opts = [['all', 'All'], ['progress', 'In progress'], ['unstarted', 'Not started'], ['complete', 'Complete']]
+  return `
+    ${segmentHTML(state)}
+    <div class="lib-chips">
+      ${opts.map(([id, label]) => {
+        const n = all.filter(s => seriesMatches(s, id)).length
+        return `<button class="chip ${state.seriesFilter === id ? 'selected' : ''}" data-series-filter="${id}">
+          ${label}${n ? ` <span class="lib-chip-count">${n}</span>` : ''}</button>`
+      }).join('')}
+    </div>`
+}
+
+// ── Rows / cards ──────────────────────────────────────────────────────────────
+
+function listRowHTML(book, sort) {
+  const meta = sort === 'added' && book.addedAt
+    ? `Added ${book.addedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : book.dateCompleted
+      ? `Finished ${book.dateCompleted.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+      : SHELF_BADGE[book.shelf]
+  return `
+    <div class="lib-row" data-book-id="${esc(book.id)}" role="button" tabindex="0">
+      <div class="lib-row-cover">${coverImgHTML(book)}</div>
+      <div class="lib-row-info">
+        <span class="lib-row-title">${esc(book.title)}</span>
+        <span class="lib-row-author">${esc(book.author)}</span>
+        <span class="lib-row-meta">
+          ${book.rating ? `<span class="lib-row-stars">${'★'.repeat(book.rating)}</span>` : ''}${esc(meta)}
+        </span>
+      </div>
+      ${book.isBOTM ? `<span class="material-symbols-rounded lib-row-botm">workspace_premium</span>` : ''}
+    </div>`
+}
+
+function seriesCardHTML(s) {
+  const pct = s.total ? Math.round(s.read / s.total * 100) : 0
+  return `
+    <div class="series-card">
+      <div class="series-card-header" role="button" tabindex="0">
+        <div class="series-card-info">
+          <div class="series-card-name">${esc(s.name)}</div>
+          <div class="series-card-count">${s.read} of ${s.total} read</div>
+        </div>
+        <span class="icon-btn series-expand-btn" aria-hidden="true">
+          <span class="material-symbols-rounded">expand_more</span>
+        </span>
+      </div>
+      <div class="series-progress-bar"><div class="series-progress-fill" style="width:${pct}%"></div></div>
+      ${s.next ? `
+        <div class="series-next"><span class="material-symbols-rounded">auto_stories</span>
+          ${s.next.seriesNumber ? `#${esc(s.next.seriesNumber)} · ` : ''}${esc(s.next.title)}</div>`
+      : s.read === s.total ? `
+        <div class="series-next series-next-done"><span class="material-symbols-rounded">check_circle</span>All books read!</div>` : ''}
+      <div class="series-book-list">
+        ${s.books.map(b => `
+          <div class="series-book-row" data-book-id="${esc(b.id)}" role="button" tabindex="0">
+            <div class="series-book-cover">${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="" loading="lazy" />` : ''}</div>
+            <div class="series-book-info">
+              ${b.seriesNumber ? `<span class="series-book-num">#${esc(b.seriesNumber)}</span>` : ''}
+              <span class="series-book-title">${esc(b.title)}</span>
+            </div>
+            <span class="series-book-badge ${b.shelf === 'read' ? 'series-badge-read' : 'series-badge-other'}">${SHELF_BADGE[b.shelf]}</span>
+          </div>`).join('')}
+      </div>
+    </div>`
+}
+
+// ── Filter sheet ──────────────────────────────────────────────────────────────
+
+function openFilterSheet(books, state, onApply) {
+  let f = structuredClone(state.filters)
+  const inShelf = books.filter(b => state.shelf === 'all' || b.shelf === state.shelf)
+
+  const genreCounts = new Map()
+  inShelf.forEach(b => { if (b.genre) genreCounts.set(b.genre, (genreCounts.get(b.genre) || 0) + 1) })
+  const genres = [...genreCounts.entries()].sort((a, b) => b[1] - a[1])
+  const years = [...new Set(inShelf.filter(b => b.dateCompleted).map(b => b.dateCompleted.getFullYear()))].sort((a, b) => b - a)
+  const TOP_GENRES = 12
+
+  const { sheet, close } = openSheet(`
+    <div class="filter-sheet">
+      <div class="filter-sheet-head">
+        <h2>Filters</h2>
+        <button class="btn btn-text" id="filter-clear">Clear all</button>
+      </div>
+
+      <div class="filter-group">
+        <div class="bd-label">Rating</div>
+        <div class="chips" data-group="rating">
+          ${[[0, 'Any'], [3, '3+ stars'], [4, '4+ stars'], [5, '5 stars']].map(([v, l]) =>
+            `<button class="chip" data-value="${v}">${l}</button>`).join('')}
+        </div>
+      </div>
+
+      ${years.length ? `
+      <div class="filter-group">
+        <div class="bd-label">Year read</div>
+        <div class="chips" data-group="years">
+          ${years.map(y => `<button class="chip" data-value="${y}">${y}</button>`).join('')}
+        </div>
+      </div>` : ''}
+
+      <div class="filter-group">
+        <div class="bd-label">Series</div>
+        <div class="chips" data-group="series">
+          ${[['any', 'Any'], ['yes', 'In a series'], ['no', 'Standalone']].map(([v, l]) =>
+            `<button class="chip" data-value="${v}">${l}</button>`).join('')}
+        </div>
+      </div>
+
+      ${genres.length ? `
+      <div class="filter-group">
+        <div class="bd-label">Genre</div>
+        <div class="chips filter-genres" data-group="genres">
+          ${genres.map(([g, n], i) => `<button class="chip ${i >= TOP_GENRES ? 'filter-extra' : ''}" data-value="${esc(g)}">
+            ${esc(g)} <span class="lib-chip-count">${n}</span></button>`).join('')}
+        </div>
+        ${genres.length > TOP_GENRES ? `<button class="btn btn-text filter-more" id="filter-more">Show all ${genres.length} genres</button>` : ''}
+      </div>` : ''}
+    </div>
+    <div class="bd-footer">
+      <button class="btn btn-filled" id="filter-apply"></button>
+    </div>
+  `, { className: 'filter-sheet-wrap' })
+
+  const sync = () => {
+    sheet.querySelectorAll('[data-group]').forEach(group => {
+      const key = group.dataset.group
+      group.querySelectorAll('.chip').forEach(chip => {
+        const v = chip.dataset.value
+        const on = key === 'rating' ? Number(v) === f.minRating
+          : key === 'series' ? v === f.series
+          : key === 'years' ? f.years.includes(Number(v))
+          : f.genres.includes(v)
+        chip.classList.toggle('selected', on)
+      })
+    })
+    const n = filterBooks(books, state, '', f).length
+    sheet.querySelector('#filter-apply').textContent = `Show ${n} book${n === 1 ? '' : 's'}`
+  }
+  sync()
+
+  sheet.addEventListener('click', e => {
+    const chip = e.target.closest('[data-group] .chip')
+    if (chip) {
+      const key = chip.closest('[data-group]').dataset.group
+      const v = chip.dataset.value
+      if (key === 'rating') f.minRating = Number(v)
+      if (key === 'series') f.series = v
+      if (key === 'years') {
+        const y = Number(v)
+        f.years = f.years.includes(y) ? f.years.filter(x => x !== y) : [...f.years, y]
+      }
+      if (key === 'genres') f.genres = f.genres.includes(v) ? f.genres.filter(x => x !== v) : [...f.genres, v]
+      return sync()
+    }
+    if (e.target.closest('#filter-more')) {
+      sheet.querySelector('.filter-genres').classList.add('show-all')
+      e.target.closest('#filter-more').remove()
+      return
+    }
+    if (e.target.closest('#filter-clear')) { f = structuredClone(NO_FILTERS); return sync() }
+    if (e.target.closest('#filter-apply')) { onApply(f); close() }
+  })
+}

@@ -1,18 +1,20 @@
 import { esc } from '../escape.js'
-import { watchShelf, getBook } from '../db.js'
+import { watchAllBooks, watchReadingGoals, updateBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
 import { navigateTo } from '../main.js'
+import { avatarButtonHTML, wireAvatar } from './topbar.js'
+import { openSheet } from './sheet.js'
+import { openLibrary } from './library.js'
 
-const SHELVES = [
-  { id: 'reading', label: 'Reading' },
-  { id: 'want',    label: 'TBR'     },
-  { id: 'read',    label: 'Read'    },
-  { id: 'dnf',     label: 'DNF'     },
-]
+// Home tab: what you're reading now and what's next. The full collection
+// lives in the library tab (library.js).
+
+export const SHELF_BADGE = { reading: 'Reading', want: 'TBR', read: 'Read', dnf: 'DNF' }
+const ROW_LIMIT = 10
 
 // Snackbar helper — exported for use by other views
-let snackbarTimeout = null
 // Optional action: { label, onClick } adds a button (e.g. Undo) and keeps it up longer
+let snackbarTimeout = null
 export function showSnackbar(msg, action) {
   document.querySelector('.snackbar')?.remove()
   clearTimeout(snackbarTimeout)
@@ -36,344 +38,262 @@ export function showSnackbar(msg, action) {
   snackbarTimeout = setTimeout(() => el.remove(), action ? 6000 : 3000)
 }
 
-const allShelfBooks  = { reading: [], want: [], read: [], dnf: [] }
-const SHELF_BADGE    = { reading: 'Reading', want: 'TBR', read: 'Read', dnf: 'DNF' }
-let expandedRead     = false
-let latestReadBooks  = []
-const MONTHS_PER_PAGE = 6
-let visibleMonths     = MONTHS_PER_PAGE
-const expandedSeries  = new Set()
+// ── Home ──────────────────────────────────────────────────────────────────────
 
 export function renderShelves(container) {
   container.innerHTML = `
     <div class="shelves-root">
-
       <div class="shelves-top">
         <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
-        <div class="search-bar shelves-search-bar">
+        <button class="search-bar shelves-search-bar home-search-btn" id="home-search">
           <span class="material-symbols-rounded">search</span>
-          <input class="search-input" id="shelf-search-input" type="text"
-            placeholder="Search your library…" autocomplete="off" />
-          <button class="icon-btn" id="shelf-search-clear" style="display:none;">
-            <span class="material-symbols-rounded">close</span>
-          </button>
-        </div>
+          <span class="home-search-placeholder">Search your library…</span>
+        </button>
+        ${avatarButtonHTML()}
       </div>
 
-      <div id="shelf-search-results" style="display:none;flex:1;overflow-y:auto;"></div>
-
-      <div id="shelves-content" style="flex:1;overflow-y:auto;padding:12px 0 24px;">
-
-        <!-- Reading -->
-        <div class="shelf-section">
-          <div class="shelf-header">
-            <span class="shelf-title">Reading</span>
-            <span class="shelf-count" id="count-reading"></span>
-          </div>
-          <div class="shelf-scroll" id="scroll-reading">${skeletonCards(3)}</div>
-        </div>
-
-        <!-- TBR -->
-        <div class="shelf-section">
-          <div class="shelf-header">
-            <span class="shelf-title">TBR</span>
-            <span class="shelf-count" id="count-want"></span>
-          </div>
-          <div class="shelf-scroll" id="scroll-want">${skeletonCards(3)}</div>
-        </div>
-
-        <!-- Read -->
-        <div class="shelf-section" id="shelf-read-section">
-          <div class="shelf-header">
-            <span class="shelf-title">Read</span>
-            <span class="shelf-count" id="count-read"></span>
-            <button class="btn btn-text expand-read-btn" id="expand-read-btn">
-              <span class="material-symbols-rounded" style="font-size:18px">expand_more</span>
-              View all
-            </button>
-          </div>
-          <div id="shelf-body-read">
-            <div class="shelf-scroll" id="scroll-read">${skeletonCards(3)}</div>
-          </div>
-        </div>
-
-        <!-- Expanded read months render here, outside the card -->
-        <div id="shelf-read-expanded"></div>
-
-        <!-- DNF -->
-        <div class="shelf-section">
-          <div class="shelf-header">
-            <span class="shelf-title">DNF</span>
-            <span class="shelf-count" id="count-dnf"></span>
-          </div>
-          <div class="shelf-scroll" id="scroll-dnf">${skeletonCards(3)}</div>
-        </div>
-
-        <!-- Series -->
-        <div class="shelf-section" id="shelf-series-section">
-          <div class="shelf-header">
-            <span class="shelf-title">Series</span>
-            <span class="shelf-count" id="count-series"></span>
-          </div>
-          <div id="series-list"></div>
-        </div>
-
+      <div id="shelves-content" class="home-content">
+        <div id="home-goal"></div>
+        <section class="home-section" id="home-reading">${skeletonReading()}</section>
+        <section class="home-section" id="home-next"></section>
+        <section class="home-section" id="home-recent"></section>
+        <section class="home-section" id="home-series"></section>
       </div>
     </div>
   `
+  wireAvatar(container)
+  container.querySelector('#home-search').addEventListener('click', () => openLibrary({ focusSearch: true }))
 
-  // ── Search ────────────────────────────────────────────
-  const searchInput = container.querySelector('#shelf-search-input')
-  const clearBtn    = container.querySelector('#shelf-search-clear')
-  const resultsEl   = container.querySelector('#shelf-search-results')
-  const contentEl   = container.querySelector('#shelves-content')
-
-  const hideResults = () => {
-    resultsEl.style.display = 'none'
-    resultsEl.innerHTML = ''
-    contentEl.style.display = 'block'
-    clearBtn.style.display = 'none'
-    searchInput.value = ''
+  let books = null, goals = {}
+  const render = () => {
+    if (!books) return
+    renderGoal(container, books, goals)
+    renderReading(container, books)
+    renderRow(container, '#home-next', 'Up next',
+      books.filter(b => b.shelf === 'want').sort(byDesc(b => b.addedAt)),
+      { shelf: 'want', sort: 'added' }, 'Nothing on your TBR yet.')
+    renderRow(container, '#home-recent', 'Recently finished',
+      books.filter(b => b.shelf === 'read').sort(byDesc(b => b.dateCompleted)),
+      { shelf: 'read', sort: 'finished' }, 'Finished books show up here.')
+    renderSeriesInProgress(container, books)
   }
 
-  clearBtn.addEventListener('click', () => { hideResults(); searchInput.focus() })
-
-  searchInput.addEventListener('input', () => {
-    const q = searchInput.value.trim().toLowerCase()
-    clearBtn.style.display = q ? 'flex' : 'none'
-    if (!q) { hideResults(); return }
-
-    resultsEl.style.display = 'block'
-    contentEl.style.display = 'none'
-
-    const all = [...allShelfBooks.reading, ...allShelfBooks.want, ...allShelfBooks.read, ...allShelfBooks.dnf]
-    const hits = all.filter(b =>
-      b.title.toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q)
-    )
-
-    if (!hits.length) {
-      resultsEl.innerHTML = `<div class="empty-state">
-        <span class="material-symbols-rounded">search_off</span>
-        <div class="empty-state-title">No matches</div>
-      </div>`
-      return
-    }
-
-    resultsEl.innerHTML = hits.map(b => `
-      <div class="search-result shelf-search-result" data-id="${b.id}">
-        <div class="search-result-cover">
-          ${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="${esc(b.title)}" loading="lazy" />` : ''}
-        </div>
-        <div class="search-result-info">
-          <div class="search-result-title">${esc(b.title)}</div>
-          <div class="search-result-author">${esc(b.author)}</div>
-        </div>
-        <span class="search-result-badge">${SHELF_BADGE[b.shelf] || b.shelf}</span>
-      </div>
-    `).join('')
-
-    resultsEl.querySelectorAll('.shelf-search-result').forEach((row, i) => {
-      row.addEventListener('click', async () => {
-        try {
-          const bookData = await getBook(hits[i].id)
-          openBookDetail({ ...hits[i], ...bookData }, hits[i].shelf, null)
-        } catch {
-          openBookDetail(hits[i], hits[i].shelf, null)
-        }
-      })
-    })
+  // One delegated handler for every book on the page
+  container.querySelector('#shelves-content').addEventListener('click', e => {
+    const update = e.target.closest('[data-update-progress]')
+    if (update) return openProgressSheet(books.find(b => b.id === update.dataset.updateProgress))
+    const seeAll = e.target.closest('[data-see-all]')
+    if (seeAll) return openLibrary(JSON.parse(seeAll.dataset.seeAll))
+    const el = e.target.closest('.book-card, .home-reading-card, .home-series-row')
+    const book = el && books.find(b => b.id === el.dataset.bookId)
+    if (book) openBookDetail(book, book.shelf, null)
   })
 
-  // ── Read expand/collapse ──────────────────────────────
-  container.querySelector('#expand-read-btn').addEventListener('click', () => {
-    expandedRead = !expandedRead
-    renderReadSection(container, latestReadBooks)
-  })
-
-  // ── Watch shelves ─────────────────────────────────────
-  const unsubscribers = SHELVES.map(shelf =>
-    watchShelf(shelf.id, books => {
-      allShelfBooks[shelf.id] = books
-      if (shelf.id === 'read') {
-        latestReadBooks = books
-        renderReadSection(container, books)
-      } else {
-        renderShelfScroll(container, shelf.id, books)
-      }
-      renderSeriesSection(container)
-    })
-  )
-
-  return () => unsubscribers.forEach(u => u())
+  const unsubBooks = watchAllBooks(b => { books = b; render() })
+  const unsubGoals = watchReadingGoals(g => { goals = g; render() })
+  return () => { unsubBooks(); unsubGoals() }
 }
 
-// ── Horizontal scroll shelf (Reading / TBR / DNF) ────────────────────────────
+export function destroyShelves() {}
 
-function renderShelfScroll(container, shelfId, books) {
-  const scrollEl = container.querySelector(`#scroll-${shelfId}`)
-  const countEl  = container.querySelector(`#count-${shelfId}`)
-  if (!scrollEl) return
+const byDesc = key => (a, b) => (key(b)?.getTime?.() ?? 0) - (key(a)?.getTime?.() ?? 0)
 
-  countEl.textContent = books.length || ''
+// ── Sections ──────────────────────────────────────────────────────────────────
 
-  if (!books.length) {
-    scrollEl.innerHTML = `
-      <div class="shelf-empty">
-        No books here yet —
-        <button class="btn btn-text" style="padding:0 4px;font-size:0.875rem;" data-goto="search">
-          search to add one
-        </button>
-      </div>`
-    scrollEl.querySelector('[data-goto]')?.addEventListener('click', () => navigateTo('search'))
-    return
-  }
-
-  scrollEl.innerHTML = books.map(b => bookCardHTML(b, shelfId)).join('')
-  attachCardListeners(scrollEl, books, shelfId)
+function renderGoal(container, books, goals) {
+  const el = container.querySelector('#home-goal')
+  const year = new Date().getFullYear()
+  const goal = Number(goals[year]) || 0
+  if (!goal) { el.innerHTML = ''; return }
+  const read = books.filter(b => b.shelf === 'read' && b.dateCompleted?.getFullYear() === year).length
+  const start = new Date(year, 0, 1)
+  const daysInYear = (new Date(year + 1, 0, 1) - start) / 86400000
+  const diff = read - Math.floor(goal * (Math.floor((Date.now() - start) / 86400000) + 1) / daysInYear)
+  const status = read >= goal ? 'Goal reached!'
+    : diff > 0 ? `${diff} ahead of schedule`
+    : diff < 0 ? `${-diff} behind schedule` : 'Right on track'
+  const C = 2 * Math.PI * 14
+  el.innerHTML = `
+    <button class="home-goal" data-goto-profile-goal>
+      <svg viewBox="0 0 36 36" class="home-goal-ring" aria-hidden="true">
+        <circle cx="18" cy="18" r="14" class="goal-ring-track" />
+        <circle cx="18" cy="18" r="14" class="goal-ring-progress ${read >= goal ? 'done' : ''}"
+          stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - Math.min(1, read / goal))}" />
+      </svg>
+      <span class="home-goal-text">
+        <span class="home-goal-main">${read} of ${goal} books in ${year}</span>
+        <span class="home-goal-sub">${status}</span>
+      </span>
+      <span class="material-symbols-rounded">chevron_right</span>
+    </button>`
+  el.querySelector('[data-goto-profile-goal]').addEventListener('click', () => navigateTo('profile'))
 }
 
-// ── Read shelf — collapsed (scroll) or expanded (month grid) ─────────────────
-
-function renderReadSection(container, books) {
-  const countEl    = container.querySelector('#count-read')
-  const expandBtn  = container.querySelector('#expand-read-btn')
-  const bodyEl     = container.querySelector('#shelf-body-read')
-  const expandedEl = container.querySelector('#shelf-read-expanded')
-  if (!bodyEl || !expandedEl) return
-
-  // Sort by most recently completed first; books without a date go to the end
-  const sorted = [...books].sort((a, b) => {
-    const da = a.dateCompleted ? new Date(a.dateCompleted).getTime() : 0
-    const db = b.dateCompleted ? new Date(b.dateCompleted).getTime() : 0
-    return db - da
-  })
-
-  if (countEl) countEl.textContent = sorted.length || ''
-  if (expandBtn) {
-    expandBtn.innerHTML = expandedRead
-      ? `<span class="material-symbols-rounded" style="font-size:18px">expand_less</span> Collapse`
-      : `<span class="material-symbols-rounded" style="font-size:18px">expand_more</span> View all`
-  }
-
-  if (!sorted.length) {
-    bodyEl.innerHTML = `<div class="shelf-scroll"><div class="shelf-empty">
-      No books here yet —
-      <button class="btn btn-text" style="padding:0 4px;font-size:0.875rem;" data-goto="search">search to add one</button>
-    </div></div>`
-    bodyEl.querySelector('[data-goto]')?.addEventListener('click', () => navigateTo('search'))
-    expandedEl.innerHTML = ''
-    return
-  }
-
-  if (!expandedRead) {
-    bodyEl.style.display = 'block'
-    bodyEl.innerHTML = `<div class="shelf-scroll" id="scroll-read">
-      ${sorted.map(b => bookCardHTML(b, 'read')).join('')}
-    </div>`
-    attachCardListeners(bodyEl.querySelector('#scroll-read'), sorted, 'read')
-    expandedEl.innerHTML = ''
-  } else {
-    bodyEl.style.display = 'none'
-    visibleMonths = MONTHS_PER_PAGE
-    renderReadMonths(expandedEl, sorted)
-  }
-}
-
-// Month groups render OUTSIDE the shelf card so sticky headers work cleanly
-function renderReadMonths(expandedEl, books) {
-  const groups  = groupByMonth(books)
-  const visible = groups.slice(0, visibleMonths)
-  const hasMore = groups.length > visibleMonths
-
-  expandedEl.innerHTML = `
-    ${visible.map(({ label, books: gb }) => `
-      <div class="month-sticky-label">${label}</div>
-      <div class="shelf-section" style="margin-top:0;">
-        <div class="book-grid" style="padding:12px 8px 4px;">
-          ${gb.map(b => bookCardHTML(b, 'read')).join('')}
-        </div>
-      </div>
-    `).join('')}
-    ${hasMore ? `
-      <button class="btn btn-tonal load-more-btn"
-        style="width:calc(100% - 32px);margin:8px 16px 4px;height:48px;">
-        <span class="material-symbols-rounded">expand_more</span>
-        Load older months (${groups.length - visibleMonths} more)
-      </button>` : ''}
+function renderReading(container, books) {
+  const el = container.querySelector('#home-reading')
+  const reading = books.filter(b => b.shelf === 'reading').sort(byDesc(b => b.addedAt))
+  el.innerHTML = `
+    ${sectionHeader('Currently reading', reading.length > 1 ? reading.length : '')}
+    ${reading.length ? reading.map(readingCardHTML).join('') : `
+      <div class="home-empty">
+        <span class="material-symbols-rounded">auto_stories</span>
+        Not reading anything right now — pick something from Up next.
+      </div>`}
   `
+}
 
-  const allVisible = visible.flatMap(g => g.books)
-  expandedEl.querySelectorAll('.book-card').forEach((card, i) => {
-    card.addEventListener('click', async () => {
-      try {
-        const bookData = await getBook(allVisible[i].id)
-        openBookDetail({ ...allVisible[i], ...bookData }, 'read', null)
-      } catch {
-        openBookDetail(allVisible[i], 'read', null)
-      }
-    })
+function readingCardHTML(book) {
+  const pct = book.pageCount ? Math.min(100, Math.round((book.progress || 0) / book.pageCount * 100)) : 0
+  return `
+    <div class="home-reading-card" data-book-id="${esc(book.id)}" role="button" tabindex="0">
+      <div class="home-reading-cover">${coverImgHTML(book)}</div>
+      <div class="home-reading-info">
+        <div class="home-reading-title">${esc(book.title)}</div>
+        <div class="home-reading-author">${esc(book.author)}</div>
+        ${book.pageCount ? `
+          <div class="bd-progress-bar"><div class="bd-progress-fill" style="width:${pct}%"></div></div>
+          <div class="home-reading-pages">p. ${book.progress || 0} of ${book.pageCount} · ${pct}%</div>` : ''}
+        <button class="btn btn-tonal home-update-btn" data-update-progress="${esc(book.id)}">
+          <span class="material-symbols-rounded">bookmark</span>Update page
+        </button>
+      </div>
+    </div>`
+}
+
+function renderRow(container, selector, title, books, preset, emptyText) {
+  const el = container.querySelector(selector)
+  el.innerHTML = `
+    ${sectionHeader(title, '', books.length > ROW_LIMIT || books.length
+      ? `<button class="home-see-all" data-see-all='${esc(JSON.stringify(preset))}'>See all ${books.length}</button>` : '')}
+    ${books.length
+      ? `<div class="shelf-scroll">${books.slice(0, ROW_LIMIT).map(b => bookCardHTML(b)).join('')}</div>`
+      : `<div class="home-empty">${emptyText}</div>`}
+  `
+}
+
+function renderSeriesInProgress(container, books) {
+  const el = container.querySelector('#home-series')
+  // Started but not finished: at least one read and one still to read
+  const inProgress = groupSeries(books)
+    .filter(s => s.read > 0 && s.next)
+    .sort((a, b) => (b.lastRead?.getTime() ?? 0) - (a.lastRead?.getTime() ?? 0))
+    .slice(0, 5)
+
+  if (!inProgress.length) { el.innerHTML = ''; return }
+  el.innerHTML = `
+    ${sectionHeader('Series in progress', '',
+      `<button class="home-see-all" data-see-all='${esc(JSON.stringify({ segment: 'series' }))}'>All series</button>`)}
+    <div class="home-series-list">
+      ${inProgress.map(s => `
+        <div class="home-series-row" data-book-id="${esc(s.next.id)}" role="button" tabindex="0">
+          <div class="home-series-cover">${coverImgHTML(s.next)}</div>
+          <div class="home-series-info">
+            <span class="home-series-name">${esc(s.name)}</span>
+            <span class="home-series-next">Next: ${s.next.seriesNumber ? `#${esc(s.next.seriesNumber)} ` : ''}${esc(s.next.title)}</span>
+            <div class="series-progress-bar"><div class="series-progress-fill" style="width:${Math.round(s.read / s.total * 100)}%"></div></div>
+          </div>
+          <span class="home-series-count">${s.read}/${s.total}</span>
+        </div>`).join('')}
+    </div>
+  `
+}
+
+function sectionHeader(title, count = '', action = '') {
+  return `
+    <div class="home-section-head">
+      <h2>${title}${count ? ` <span class="shelf-count">${count}</span>` : ''}</h2>
+      ${action}
+    </div>`
+}
+
+// ── Update page ───────────────────────────────────────────────────────────────
+
+function openProgressSheet(book) {
+  if (!book) return
+  const { sheet, close } = openSheet(`
+    <div class="progress-sheet">
+      <div class="progress-sheet-head">
+        <div class="home-reading-cover progress-sheet-cover">${coverImgHTML(book)}</div>
+        <div>
+          <div class="botm-page-kicker" style="color:var(--accent-text)">Update progress</div>
+          <div class="home-reading-title">${esc(book.title)}</div>
+        </div>
+      </div>
+      <label class="progress-sheet-label" for="progress-sheet-input">Current page</label>
+      <div class="progress-sheet-row">
+        <button class="icon-btn progress-step" data-step="-10" aria-label="Back 10 pages">
+          <span class="material-symbols-rounded">remove</span>
+        </button>
+        <input id="progress-sheet-input" class="progress-sheet-input" type="number" inputmode="numeric"
+          min="0" max="${book.pageCount || 99999}" value="${book.progress || 0}" />
+        <button class="icon-btn progress-step" data-step="10" aria-label="Forward 10 pages">
+          <span class="material-symbols-rounded">add</span>
+        </button>
+        ${book.pageCount ? `<span class="progress-sheet-total">of ${book.pageCount}</span>` : ''}
+      </div>
+      ${book.pageCount ? `<div class="bd-progress-bar"><div class="bd-progress-fill" id="progress-sheet-fill"></div></div>` : ''}
+      <div class="progress-sheet-actions">
+        <button class="btn btn-tonal" id="progress-finished">
+          <span class="material-symbols-rounded">check_circle</span>Finished it
+        </button>
+        <button class="btn btn-filled" id="progress-save">Save</button>
+      </div>
+    </div>
+  `)
+
+  const input = sheet.querySelector('#progress-sheet-input')
+  const fill = sheet.querySelector('#progress-sheet-fill')
+  const sync = () => {
+    if (fill) fill.style.width = `${Math.min(100, (Number(input.value) || 0) / book.pageCount * 100)}%`
+  }
+  sync()
+  input.addEventListener('input', sync)
+  sheet.querySelectorAll('.progress-step').forEach(btn => btn.addEventListener('click', () => {
+    const max = book.pageCount || Infinity
+    input.value = Math.max(0, Math.min(max, (Number(input.value) || 0) + Number(btn.dataset.step)))
+    sync()
+  }))
+
+  sheet.querySelector('#progress-save').addEventListener('click', async () => {
+    const page = Math.max(0, Math.round(Number(input.value) || 0))
+    try {
+      await updateBook(book.id, { progress: page })
+      showSnackbar(book.pageCount ? `Page ${page} · ${Math.round(page / book.pageCount * 100)}%` : `Page ${page}`)
+      close()
+    } catch (err) { console.error(err); showSnackbar('Something went wrong') }
   })
-
-  expandedEl.querySelector('.load-more-btn')?.addEventListener('click', () => {
-    visibleMonths += MONTHS_PER_PAGE
-    renderReadMonths(expandedEl, books)
+  sheet.querySelector('#progress-finished').addEventListener('click', async () => {
+    try {
+      await updateBook(book.id, { shelf: 'read', progress: book.pageCount || 0, dateCompleted: new Date() })
+      showSnackbar(`Finished ${book.title}`)
+      close()
+    } catch (err) { console.error(err); showSnackbar('Something went wrong') }
   })
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Shared book bits (also used by the library tab) ──────────────────────────
 
-function groupByMonth(books) {
-  const map = new Map()
-  books.forEach(book => {
-    const d = book.dateCompleted
-    const key = d ? d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown'
-    if (!map.has(key)) map.set(key, [])
-    map.get(key).push(book)
-  })
-  return Array.from(map.entries()).map(([label, books]) => ({ label, books }))
-}
-
-function attachCardListeners(el, books, shelfId) {
-  el.querySelectorAll('.book-card').forEach((card, i) => {
-    card.addEventListener('click', async () => {
-      try {
-        const bookData = await getBook(books[i].id)
-        openBookDetail({ ...books[i], ...bookData }, shelfId, null)
-      } catch {
-        openBookDetail(books[i], shelfId, null)
-      }
-    })
-  })
-}
-
-function bookCardHTML(book, shelf) {
-  const coverHTML = book.thumbnail
+export function coverImgHTML(book) {
+  return book.thumbnail
     ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" loading="lazy"
-           data-book-id="${book.id}"
-           data-title="${esc(book.title)}"
-           data-author="${esc(book.author)}" />`
+         data-book-id="${esc(book.id)}" data-title="${esc(book.title)}" data-author="${esc(book.author)}" />`
     : `<div class="book-cover-placeholder">
          <span class="material-symbols-rounded">menu_book</span>
          <div class="placeholder-title">${esc(book.title)}</div>
        </div>`
+}
 
-  const progressHTML = shelf === 'reading' && book.pageCount > 0
-    ? `<div class="book-progress">
-         <div class="book-progress-fill" style="width:${Math.round((book.progress / book.pageCount) * 100)}%"></div>
-       </div>`
-    : ''
-
+export function bookCardHTML(book) {
   const botmBadge = book.isBOTM
-    ? `<div class="botm-badge"><span class="material-symbols-rounded">workspace_premium</span></div>`
-    : ''
-
+    ? `<div class="botm-badge"><span class="material-symbols-rounded">workspace_premium</span></div>` : ''
   const botyBadge = book.isBOTY
-    ? `<div class="boty-badge"><span class="material-symbols-rounded">emoji_events</span></div>`
+    ? `<div class="boty-badge"><span class="material-symbols-rounded">emoji_events</span></div>` : ''
+  const progressHTML = book.shelf === 'reading' && book.pageCount > 0
+    ? `<div class="book-progress"><div class="book-progress-fill" style="width:${Math.round((book.progress / book.pageCount) * 100)}%"></div></div>`
     : ''
-
   return `
-    <div class="book-card">
-      <div class="book-cover">${coverHTML}${botmBadge}${botyBadge}</div>
+    <div class="book-card" data-book-id="${esc(book.id)}" role="button" tabindex="0">
+      <div class="book-cover">${coverImgHTML(book)}${botmBadge}${botyBadge}</div>
       <div class="book-card-info">
         <div class="book-card-title">${esc(book.title)}</div>
         <div class="book-card-author">${esc(book.author)}</div>
@@ -383,150 +303,35 @@ function bookCardHTML(book, shelf) {
     </div>`
 }
 
-// ── Series section ────────────────────────────────────────────────────────────
-
-function renderSeriesSection(container) {
-  const listEl  = container.querySelector('#series-list')
-  const countEl = container.querySelector('#count-series')
-  if (!listEl) return
-
-  const allBooks = [
-    ...allShelfBooks.reading,
-    ...allShelfBooks.want,
-    ...allShelfBooks.read,
-    ...allShelfBooks.dnf,
-  ].filter(b => b.series)
-
-  // Group by series name
+/** Books grouped by series, each with read count and the next unread book */
+export function groupSeries(books) {
   const map = new Map()
-  allBooks.forEach(b => {
+  books.filter(b => b.series).forEach(b => {
     if (!map.has(b.series)) map.set(b.series, [])
     map.get(b.series).push(b)
   })
-
-  if (countEl) countEl.textContent = map.size || ''
-
-  if (!map.size) {
-    listEl.innerHTML = `<div class="shelf-empty" style="padding:12px 16px;">
-      No series yet — add a series name when editing a book.
-    </div>`
-    return
-  }
-
-  // Sort series alphabetically
-  const series = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-
-  listEl.innerHTML = series.map(([name, books]) => seriesCardHTML(name, books)).join('')
-
-  // Wire expand buttons
-  listEl.querySelectorAll('.series-expand-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation()
-      const name    = btn.dataset.series
-      const card    = btn.closest('.series-card')
-      const bookList = card.querySelector('.series-book-list')
-      const icon    = btn.querySelector('.material-symbols-rounded')
-      if (expandedSeries.has(name)) {
-        expandedSeries.delete(name)
-        bookList.style.display = 'none'
-        icon.textContent = 'expand_more'
-      } else {
-        expandedSeries.add(name)
-        bookList.style.display = 'block'
-        icon.textContent = 'expand_less'
-      }
-    })
-  })
-
-  // Wire book taps in expanded list
-  listEl.querySelectorAll('.series-book-row').forEach(row => {
-    row.addEventListener('click', async () => {
-      const id = row.dataset.id
-      const book = allBooks.find(b => b.id === id)
-      if (!book) return
-      try {
-        const full = await getBook(id)
-        openBookDetail({ ...book, ...full }, book.shelf, () => renderSeriesSection(container))
-      } catch {
-        openBookDetail(book, book.shelf, () => renderSeriesSection(container))
-      }
-    })
+  return [...map.entries()].map(([name, list]) => {
+    const sorted = [...list].sort((a, b) => (parseFloat(a.seriesNumber) || 0) - (parseFloat(b.seriesNumber) || 0))
+    const read = sorted.filter(b => b.shelf === 'read')
+    return {
+      name,
+      books: sorted,
+      total: sorted.length,
+      read: read.length,
+      next: sorted.find(b => b.shelf !== 'read' && b.shelf !== 'dnf') || null,
+      lastRead: read.reduce((max, b) => (b.dateCompleted && (!max || b.dateCompleted > max)) ? b.dateCompleted : max, null),
+    }
   })
 }
 
-function seriesCardHTML(name, books) {
-  // Sort books by series number (numeric)
-  const sorted = [...books].sort((a, b) => {
-    const na = parseFloat(a.seriesNumber) || 0
-    const nb = parseFloat(b.seriesNumber) || 0
-    return na - nb
-  })
-
-  const readCount = sorted.filter(b => b.shelf === 'read').length
-  const total     = sorted.length
-  const pct       = total ? Math.round((readCount / total) * 100) : 0
-
-  const nextBook = sorted.find(b => b.shelf !== 'read')
-  const nextLabel = nextBook
-    ? `${nextBook.seriesNumber ? `#${esc(nextBook.seriesNumber)} · ` : ''}${esc(nextBook.title)}`
-    : 'All read!'
-
-  const isExpanded = expandedSeries.has(name)
-
-  const bookRows = sorted.map(b => {
-    const badge = SHELF_BADGE[b.shelf] || b.shelf
-    const badgeClass = b.shelf === 'read' ? 'series-badge-read' : 'series-badge-other'
-    return `
-      <div class="series-book-row" data-id="${b.id}">
-        <div class="series-book-cover">
-          ${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="${esc(b.title)}" loading="lazy" />` : ''}
-        </div>
-        <div class="series-book-info">
-          ${b.seriesNumber ? `<span class="series-book-num">#${esc(b.seriesNumber)}</span>` : ''}
-          <span class="series-book-title">${esc(b.title)}</span>
-        </div>
-        <span class="series-book-badge ${badgeClass}">${badge}</span>
-      </div>`
-  }).join('')
-
+function skeletonReading() {
   return `
-    <div class="series-card">
-      <div class="series-card-header">
-        <div class="series-card-info">
-          <div class="series-card-name">${esc(name)}</div>
-          <div class="series-card-count">${readCount} of ${total} read</div>
-        </div>
-        <button class="icon-btn series-expand-btn" data-series="${esc(name)}">
-          <span class="material-symbols-rounded">${isExpanded ? 'expand_less' : 'expand_more'}</span>
-        </button>
-      </div>
-      <div class="series-progress-bar">
-        <div class="series-progress-fill" style="width:${pct}%"></div>
-      </div>
-      ${nextBook ? `
-      <div class="series-next">
-        <span class="material-symbols-rounded">auto_stories</span>
-        ${nextLabel}
-      </div>` : `
-      <div class="series-next series-next-done">
-        <span class="material-symbols-rounded">check_circle</span>
-        All books read!
-      </div>`}
-      <div class="series-book-list" style="display:${isExpanded ? 'block' : 'none'}">
-        ${bookRows}
+    <div class="home-section-head"><h2>Currently reading</h2></div>
+    <div class="home-reading-card">
+      <div class="home-reading-cover skeleton"></div>
+      <div class="home-reading-info" style="gap:8px">
+        <div class="skeleton" style="height:14px;border-radius:6px;width:80%"></div>
+        <div class="skeleton" style="height:12px;border-radius:6px;width:50%"></div>
       </div>
     </div>`
 }
-
-function skeletonCards(n) {
-  return Array.from({ length: n }, () => `
-    <div class="book-card">
-      <div class="book-cover skeleton"></div>
-      <div style="padding:8px 4px;display:flex;flex-direction:column;gap:6px;">
-        <div class="skeleton" style="height:12px;border-radius:6px;width:90%"></div>
-        <div class="skeleton" style="height:10px;border-radius:6px;width:60%"></div>
-      </div>
-    </div>`).join('')
-}
-
-export function destroyShelves() {}
