@@ -1,5 +1,5 @@
 import { esc, safeHTML } from '../escape.js'
-import { addBook, updateBook, removeBook, setBOTY, getSeriesList } from '../db.js'
+import { addBook, updateBook, removeBook, restoreBook, setBOTY, getSeriesList } from '../db.js'
 
 // Cached series list for autocomplete — invalidated on every save
 let _seriesCache = null
@@ -193,8 +193,14 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
   // ── Remove ────────────────────────────────────────────
   sheet.querySelector('#remove-btn')?.addEventListener('click', async () => {
     try {
-      await removeBook(book.id || book.googleBooksId)
-      showSnackbar('Removed from shelf')
+      const id = book.id || book.googleBooksId
+      const removed = await removeBook(id)
+      showSnackbar('Removed from shelf', removed && {
+        label: 'Undo',
+        onClick: () => restoreBook(id, removed)
+          .then(() => showSnackbar('Book restored'))
+          .catch(err => { console.error(err); showSnackbar('Couldn\'t restore book') }),
+      })
       closeSheet('manual')
       onDone?.()
     } catch (err) {

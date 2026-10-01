@@ -1,7 +1,9 @@
 import { esc } from '../escape.js'
 import { auth, signOutUser } from '../firebase.js'
-import { watchAllBooks, getBook } from '../db.js'
+import { watchAllBooks, getBook, updateBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
+import { showSnackbar } from './shelves.js'
+import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
 import { backHandlerStack } from '../main.js'
 import { Chart, registerables } from 'chart.js'
 
@@ -63,9 +65,84 @@ export function renderProfile(container) {
     updateStats(container, books)
     buildCharts(container, books)
     renderCalendarGrid(container)
+    renderFixTitles(container, books)
   })
 
+  initFixTitles(container)
+
   return () => { unsub(); killCharts() }
+}
+
+// ── Fix date-mangled titles ───────────────────────────────────────────────────
+
+function renderFixTitles(container, books) {
+  const el = container.querySelector('#fix-titles')
+  if (!el) return
+  const confirmed = getConfirmedTitleIds()
+  const suspects = books
+    .filter(b => !confirmed.has(b.id))
+    .map(b => ({ book: b, suggestion: suggestTitleFix(b.title) }))
+    .filter(s => s.suggestion !== null)
+
+  if (!suspects.length) { el.innerHTML = ''; return }
+
+  el.innerHTML = `
+    <div class="fix-titles-section">
+      <div class="chart-card">
+        <div class="chart-title" style="margin-bottom:4px;">
+          ${suspects.length === 1 ? '1 title looks' : `${suspects.length} titles look`} like a date
+        </div>
+        <div class="fix-titles-body">
+          Spreadsheet imports sometimes turn titles like “November 9” into dates.
+          Check the suggestion, edit it if needed, and save.
+        </div>
+        ${suspects.map(({ book, suggestion }) => `
+          <div class="fix-title-row" data-id="${esc(book.id)}">
+            <div class="fix-title-current">
+              Currently <b>${esc(book.title)}</b> · ${esc(book.author)}
+            </div>
+            <div class="fix-title-controls">
+              <input class="fix-title-input" type="text" value="${esc(suggestion)}"
+                aria-label="Corrected title" autocomplete="off" />
+              <button class="btn btn-filled fix-title-save">Save</button>
+              <button class="btn btn-text fix-title-ok">It’s right</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `
+}
+
+function initFixTitles(container) {
+  const el = container.querySelector('#fix-titles')
+  el?.addEventListener('click', async e => {
+    const row = e.target.closest('.fix-title-row')
+    if (!row) return
+    const id = row.dataset.id
+
+    if (e.target.closest('.fix-title-ok')) {
+      confirmTitle(id)
+      row.remove()
+      if (!el.querySelector('.fix-title-row')) el.innerHTML = ''
+      return
+    }
+
+    const saveBtn = e.target.closest('.fix-title-save')
+    if (!saveBtn) return
+    const title = row.querySelector('.fix-title-input').value.trim()
+    if (!title) return
+    saveBtn.disabled = true
+    try {
+      await updateBook(id, { title })
+      // The library listener re-renders this card once the save lands
+      showSnackbar(`Title updated to “${title}”`)
+    } catch (err) {
+      console.error(err)
+      saveBtn.disabled = false
+      showSnackbar('Something went wrong')
+    }
+  })
 }
 
 export function destroyProfile() { killCharts() }
@@ -614,7 +691,7 @@ function openYearInReview(books) {
 
 function buildHTML(user) {
   const avatarHTML = user?.photoURL
-    ? `<img src="${user.photoURL}" alt="Avatar" />`
+    ? `<img src="${esc(user.photoURL)}" alt="Avatar" referrerpolicy="no-referrer" />`
     : `<span class="material-symbols-rounded">person</span>`
 
   return `
@@ -622,8 +699,10 @@ function buildHTML(user) {
       <div class="profile-hero">
         <div class="profile-avatar">${avatarHTML}</div>
         <div class="profile-name">${esc(user?.displayName || 'Reader')}</div>
-        <div class="profile-email">${user?.email || ''}</div>
+        <div class="profile-email">${esc(user?.email)}</div>
       </div>
+
+      <div id="fix-titles"></div>
 
       <div class="stats-grid">
         <div class="stat-card">

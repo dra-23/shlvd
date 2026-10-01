@@ -87,7 +87,8 @@ export const addBook = async (bookData) => {
 export const updateBook = async (id, updates) => {
   const ref = doc(booksCol(), id)
   const dbUpdates = {}
-  if ('shelf'         in updates) dbUpdates.status        = updates.shelf
+  if ('title'         in updates) dbUpdates.title         = updates.title
+  if ('shelf'       in updates) dbUpdates.status        = updates.shelf
   if ('rating'        in updates) dbUpdates.rating        = updates.rating
   if ('notes'         in updates) dbUpdates.review        = updates.notes
   if ('progress'      in updates) dbUpdates.progress      = updates.progress
@@ -102,9 +103,17 @@ export const updateBook = async (id, updates) => {
   await updateDoc(ref, dbUpdates)
 }
 
-/** Remove a book */
+/** Remove a book — returns its raw data so the removal can be undone */
 export const removeBook = async (id) => {
-  await deleteDoc(doc(booksCol(), id))
+  const ref = doc(booksCol(), id)
+  const snap = await getDoc(ref)
+  await deleteDoc(ref)
+  return snap.exists() ? snap.data() : null
+}
+
+/** Put back a book removed with removeBook, exactly as it was */
+export const restoreBook = async (id, data) => {
+  await setDoc(doc(booksCol(), id), data)
 }
 
 /** Get a single book */

@@ -12,14 +12,28 @@ const SHELVES = [
 
 // Snackbar helper — exported for use by other views
 let snackbarTimeout = null
-export function showSnackbar(msg) {
+// Optional action: { label, onClick } adds a button (e.g. Undo) and keeps it up longer
+export function showSnackbar(msg, action) {
   document.querySelector('.snackbar')?.remove()
   clearTimeout(snackbarTimeout)
   const el = document.createElement('div')
   el.className = 'snackbar'
-  el.textContent = msg
+  const text = document.createElement('span')
+  text.textContent = msg
+  el.appendChild(text)
+  if (action) {
+    const btn = document.createElement('button')
+    btn.className = 'snackbar-action'
+    btn.textContent = action.label
+    btn.addEventListener('click', () => {
+      clearTimeout(snackbarTimeout)
+      el.remove()
+      action.onClick()
+    })
+    el.appendChild(btn)
+  }
   document.body.appendChild(el)
-  snackbarTimeout = setTimeout(() => el.remove(), 3000)
+  snackbarTimeout = setTimeout(() => el.remove(), action ? 6000 : 3000)
 }
 
 const allShelfBooks  = { reading: [], want: [], read: [], dnf: [] }

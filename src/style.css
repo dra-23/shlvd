@@ -1166,7 +1166,57 @@ html, body {
   box-shadow: var(--md-elevation-3);
   z-index: 200;
   animation: snackIn var(--md-duration-medium) var(--md-motion-decelerate) forwards;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
+
+.snackbar-action {
+  border: none;
+  background: transparent;
+  color: var(--md-primary-container);
+  font: inherit;
+  font-weight: 800;
+  padding: 6px 8px;
+  margin: -6px -8px -6px 0;
+  border-radius: var(--md-shape-sm);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.snackbar-action:active { background: color-mix(in srgb, currentColor 14%, transparent); }
+
+/* ── Fix titles card (Profile) ───────────────────────── */
+.fix-titles-section { padding: 0 16px 12px; }
+.fix-titles-body {
+  font-size: 0.8125rem;
+  color: var(--md-on-surface-variant);
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+.fix-title-row {
+  padding: 10px 0;
+  border-top: 1px solid var(--md-outline-variant);
+}
+.fix-title-current {
+  font-size: 0.8125rem;
+  color: var(--md-on-surface-variant);
+  margin-bottom: 6px;
+}
+.fix-title-current b { color: var(--md-on-surface); }
+.fix-title-controls { display: flex; gap: 8px; align-items: center; }
+.fix-title-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: 0.9375rem;
+}
+.fix-title-controls .btn { padding: 0 14px; flex-shrink: 0; }
 
 @keyframes snackIn {
   from { opacity: 0; transform: translateX(-50%) translateY(16px); }
