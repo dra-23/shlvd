@@ -3224,3 +3224,46 @@ html, body {
   transition: transform var(--md-duration-short) var(--md-motion-spring);
 }
 .shelves-logo-btn:active { transform: scale(0.9); }
+
+/* Cover wall: months with several picks fan their covers into one tile */
+.botm-tile-stack {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+}
+.botm-tile-stack .botm-tile-cover {
+  position: absolute;
+  inset: 0;
+  transition: transform var(--md-duration-medium) var(--md-motion-spring);
+}
+.botm-tile-cover--behind {
+  transform: translate(9%, -3%) rotate(7deg) scale(0.92);
+  filter: brightness(0.85);
+}
+.botm-tile-cover--top { transform: translateX(-4%) rotate(-3deg); }
+.botm-tile--stack:active .botm-tile-cover { transform: scale(0.95); }
+/* Fan out a little further on hover where there is one */
+@media (hover: hover) {
+  .botm-tile--stack:hover .botm-tile-cover--behind { transform: translate(14%, -4%) rotate(10deg) scale(0.92); }
+  .botm-tile--stack:hover .botm-tile-cover--top { transform: translateX(-7%) rotate(-5deg); }
+}
+.botm-tile-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 2;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 13px;
+  background: #F5A623;
+  color: #3d2a00;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  line-height: 26px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25);
+}
+@media (prefers-reduced-motion: reduce) {
+  .botm-tile-stack .botm-tile-cover { transition: none; }
+}

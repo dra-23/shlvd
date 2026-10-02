@@ -201,9 +201,9 @@ function buildListHTML(picks, allBooks, view = 'list') {
       const monthPicks = picksByMonth.get(k)
       const isCurrent = y === now.getFullYear() && m === now.getMonth()
       if (wall) {
-        html += monthPicks
-          ? monthPicks.map(b => wallTileHTML(b, indexOf(b))).join('')
-          : emptyTileHTML(y, m, readByMonth.get(k) || 0, isCurrent)
+        html += !monthPicks ? emptyTileHTML(y, m, readByMonth.get(k) || 0, isCurrent)
+          : monthPicks.length > 1 ? stackTileHTML(monthPicks, indexOf)
+          : wallTileHTML(monthPicks[0], indexOf(monthPicks[0]))
       } else if (monthPicks) {
         html += monthPicks.length > 1
           ? duoRowHTML(monthPicks, indexOf)
@@ -230,17 +230,38 @@ function buildListHTML(picks, allBooks, view = 'list') {
 const shortMonth = (y, m) => new Date(y, m, 1).toLocaleDateString('en-US', { month: 'short' })
 const longMonth  = (y, m) => new Date(y, m, 1).toLocaleDateString('en-US', { month: 'long' })
 
+function tileCoverHTML(book) {
+  return `
+    ${book.thumbnail
+      ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" loading="lazy" />`
+      : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`}
+    ${book.isBOTY ? `<span class="botm-tile-boty material-symbols-rounded" aria-label="Book of the Year">emoji_events</span>` : ''}`
+}
+
+const tileMonthLabel = book => book.dateCompleted
+  ? longMonth(book.dateCompleted.getFullYear(), book.dateCompleted.getMonth()) : '—'
+
 function wallTileHTML(book, index) {
-  const d = book.dateCompleted
   return `
     <button class="botm-tile" data-index="${index}">
-      <div class="botm-tile-cover">
-        ${book.thumbnail
-          ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" loading="lazy" />`
-          : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`}
-        ${book.isBOTY ? `<span class="botm-tile-boty material-symbols-rounded" aria-label="Book of the Year">emoji_events</span>` : ''}
+      <div class="botm-tile-cover">${tileCoverHTML(book)}</div>
+      <span class="botm-tile-month">${tileMonthLabel(book)}</span>
+    </button>`
+}
+
+// Several picks in one month: newest on top, the next fanned out behind it,
+// and a count. Tapping opens the newest; the month page steps to the others.
+function stackTileHTML(picks, indexOf) {
+  const [top, behind] = picks
+  return `
+    <button class="botm-tile botm-tile--stack" data-index="${indexOf(top)}"
+      aria-label="${picks.length} picks for ${tileMonthLabel(top)}">
+      <div class="botm-tile-stack">
+        <div class="botm-tile-cover botm-tile-cover--behind">${tileCoverHTML(behind)}</div>
+        <div class="botm-tile-cover botm-tile-cover--top">${tileCoverHTML(top)}</div>
+        <span class="botm-tile-count">${picks.length}</span>
       </div>
-      <span class="botm-tile-month">${d ? longMonth(d.getFullYear(), d.getMonth()) : '—'}</span>
+      <span class="botm-tile-month">${tileMonthLabel(top)}</span>
     </button>`
 }
 
