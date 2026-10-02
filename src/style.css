@@ -3209,3 +3209,18 @@ html, body {
 /* Month page bar: compact icons so the month name keeps its room */
 .botm-page-bar .icon-btn { width: 40px; height: 40px; }
 .botm-page-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Logo in the top bar is a Home button */
+.shelves-logo-btn {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--md-duration-short) var(--md-motion-spring);
+}
+.shelves-logo-btn:active { transform: scale(0.9); }

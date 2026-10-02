@@ -16,7 +16,16 @@ export function avatarButtonHTML() {
     </button>`
 }
 
-export function wireAvatar(container) {
+// Avatar opens Profile; the logo goes Home (or back to the top if already there)
+export function wireTopBar(container) {
   container.querySelector('[data-goto-profile]')
     ?.addEventListener('click', () => navigateTo('profile'))
+  container.querySelector('[data-goto-home]')?.addEventListener('click', () => {
+    const home = container.querySelector('#shelves-content')
+    if (!home) return navigateTo('shelves')
+    const start = home.scrollTop
+    home.scrollTo({ top: 0, behavior: 'smooth' })
+    // Some webviews ignore smooth scrolling — jump if nothing moved
+    setTimeout(() => { if (home.scrollTop === start) home.scrollTop = 0 }, 500)
+  })
 }

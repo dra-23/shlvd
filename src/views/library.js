@@ -2,7 +2,7 @@ import { esc } from '../escape.js'
 import { watchAllBooks } from '../db.js'
 import { openBookDetail } from './book-detail.js'
 import { navigateTo } from '../main.js'
-import { avatarButtonHTML, wireAvatar } from './topbar.js'
+import { avatarButtonHTML, wireTopBar } from './topbar.js'
 import { openSheet } from './sheet.js'
 import { bookCardHTML, coverImgHTML, groupSeries, SHELF_BADGE } from './shelves.js'
 
@@ -72,7 +72,7 @@ export function renderLibrary(container) {
   container.innerHTML = `
     <div class="shelves-root">
       <div class="shelves-top">
-        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
+        <button class="shelves-logo-btn" data-goto-home aria-label="Home"><img src="/icons/logo2-512.png" class="shelves-logo" alt="" /></button>
         <div class="search-bar shelves-search-bar">
           <span class="material-symbols-rounded">search</span>
           <input class="search-input" id="lib-search" type="search" enterkeyhint="search"
@@ -93,7 +93,7 @@ export function renderLibrary(container) {
       </div>
     </div>
   `
-  wireAvatar(container)
+  wireTopBar(container)
   const content  = container.querySelector('#library-content')
   const controls = container.querySelector('#lib-controls')
   const results  = container.querySelector('#lib-results')

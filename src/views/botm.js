@@ -4,7 +4,7 @@ import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
 import { drawBotmCard, shareImage } from '../share.js'
-import { avatarButtonHTML, wireAvatar } from './topbar.js'
+import { avatarButtonHTML, wireTopBar } from './topbar.js'
 import { loadChart } from '../charts.js'
 import { chartColors } from '../theme.js'
 
@@ -69,7 +69,7 @@ export function renderBotm(container) {
     <div style="display:flex;flex-direction:column;height:100%;">
 
       <div class="shelves-top" style="display:flex;align-items:center;">
-        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
+        <button class="shelves-logo-btn" data-goto-home aria-label="Home"><img src="/icons/logo2-512.png" class="shelves-logo" alt="" /></button>
         <div style="height:56px;display:flex;align-items:center;margin-left:12px;">
           <span class="top-bar-title" style="margin:0;">Book of the Month</span>
         </div>
@@ -85,7 +85,7 @@ export function renderBotm(container) {
     </div>
   `
 
-  wireAvatar(container)
+  wireTopBar(container)
   const content = container.querySelector('#botm-content')
   let picks = null, allBooks = null
 
@@ -631,7 +631,7 @@ function buildPageHTML(book, monthBooks, index) {
         <span class="botm-page-title">${monthLabel}</span>
       </div>
       <button class="icon-btn botm-share-btn" aria-label="Share as image">
-        <span class="material-symbols-rounded">ios_share</span>
+        <span class="material-symbols-rounded">share</span>
       </button>
       <button class="icon-btn botm-edit-btn" aria-label="Edit book">
         <span class="material-symbols-rounded">edit</span>

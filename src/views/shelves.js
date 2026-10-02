@@ -2,7 +2,7 @@ import { esc } from '../escape.js'
 import { watchAllBooks, watchReadingGoals, updateBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
 import { navigateTo } from '../main.js'
-import { avatarButtonHTML, wireAvatar } from './topbar.js'
+import { avatarButtonHTML, wireTopBar } from './topbar.js'
 import { openSheet } from './sheet.js'
 import { openLibrary } from './library.js'
 
@@ -44,7 +44,7 @@ export function renderShelves(container) {
   container.innerHTML = `
     <div class="shelves-root">
       <div class="shelves-top">
-        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
+        <button class="shelves-logo-btn" data-goto-home aria-label="Home"><img src="/icons/logo2-512.png" class="shelves-logo" alt="" /></button>
         <button class="search-bar shelves-search-bar home-search-btn" id="home-search">
           <span class="material-symbols-rounded">search</span>
           <span class="home-search-placeholder">Search your library…</span>
@@ -61,7 +61,7 @@ export function renderShelves(container) {
       </div>
     </div>
   `
-  wireAvatar(container)
+  wireTopBar(container)
   container.querySelector('#home-search').addEventListener('click', () => openLibrary({ focusSearch: true }))
 
   let books = null, goals = {}

@@ -2,7 +2,7 @@ import { esc } from '../escape.js'
 import { searchBooks } from '../books-api.js'
 import { getBook } from '../db.js'
 import { openBookDetail, openManualAdd } from './book-detail.js'
-import { avatarButtonHTML, wireAvatar } from './topbar.js'
+import { avatarButtonHTML, wireTopBar } from './topbar.js'
 
 const SHELF_BADGE = { want: 'Want', reading: 'Reading', read: 'Read' }
 
@@ -11,7 +11,7 @@ export function renderSearch(container) {
     <div style="display:flex;flex-direction:column;height:100%;">
 
       <div class="shelves-top">
-        <img src="/icons/logo2-512.png" class="shelves-logo" alt="shlvd" />
+        <button class="shelves-logo-btn" data-goto-home aria-label="Home"><img src="/icons/logo2-512.png" class="shelves-logo" alt="" /></button>
 
         <div class="search-bar shelves-search-bar" style="flex:1;">
           <span class="material-symbols-rounded">search</span>
@@ -44,7 +44,7 @@ export function renderSearch(container) {
     </div>
   `
 
-  wireAvatar(container)
+  wireTopBar(container)
   const input   = container.querySelector('#search-input')
   const clearBtn = container.querySelector('#clear-btn')
   const results = container.querySelector('#search-results')

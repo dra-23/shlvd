@@ -609,7 +609,7 @@ function openYearInReview(books) {
         </div>
         ${bookCount ? `
         <button class="icon-btn" id="yir-share" aria-label="Share as image">
-          <span class="material-symbols-rounded">ios_share</span>
+          <span class="material-symbols-rounded">share</span>
         </button>` : ''}
         <button class="icon-btn" id="yir-close">
           <span class="material-symbols-rounded">close</span>
