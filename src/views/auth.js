@@ -1,4 +1,13 @@
-import { signInWithGoogle } from '../firebase.js'
+import { signInWithGoogle, redirectSignInError } from '../firebase.js'
+
+// Closing the account picker isn't an error worth showing
+const QUIET = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/user-cancelled']
+
+function errorMessage(err) {
+  if (err?.code === 'auth/network-request-failed') return 'No connection. Check your signal and try again.'
+  if (err?.code === 'auth/too-many-requests') return 'Too many attempts. Wait a minute and try again.'
+  return 'Couldn’t sign in. Try again.'
+}
 
 export function renderAuth(container) {
   container.innerHTML = `
@@ -15,10 +24,25 @@ export function renderAuth(container) {
         </svg>
         Continue with Google
       </button>
+      <div class="auth-error" id="auth-error" role="alert" hidden></div>
     </div>
   `
 
-  container.querySelector('#google-sign-in').addEventListener('click', () => {
-    signInWithGoogle().catch(err => console.error('Sign-in error:', err))
+  const btn = container.querySelector('#google-sign-in')
+  const errorEl = container.querySelector('#auth-error')
+  const showError = err => {
+    console.error('Sign-in error:', err)
+    if (QUIET.includes(err?.code)) return
+    errorEl.textContent = errorMessage(err)
+    errorEl.hidden = false
+  }
+
+  btn.addEventListener('click', async () => {
+    errorEl.hidden = true
+    btn.disabled = true
+    try { await signInWithGoogle() } catch (err) { showError(err) } finally { btn.disabled = false }
   })
+
+  // A failed redirect sign-in comes back here on the next load
+  redirectSignInError().then(err => { if (err) showError(err) })
 }

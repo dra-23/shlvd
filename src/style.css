@@ -3511,3 +3511,16 @@ html, body {
 /* Let the search field shrink so extra icons never push the avatar off-screen */
 .shelves-search-bar { min-width: 0; }
 .shelves-search-bar .search-input { min-width: 0; width: 100%; }
+
+.auth-error {
+  margin-top: 16px;
+  max-width: 280px;
+  padding: 10px 14px;
+  border-radius: var(--md-shape-md);
+  background: var(--md-error-container);
+  color: var(--md-on-error-container);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+}
+.auth-error[hidden] { display: none; }

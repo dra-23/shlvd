@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth'
@@ -34,6 +36,24 @@ export const db = initializeFirestore(app, {
 const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
 
-export const signInWithGoogle = () => signInWithPopup(auth, googleProvider)
+// Popup sign-in works in normal browsers and most installed PWAs. Where the
+// popup can't open at all, fall back to a full-page redirect instead.
+const POPUP_UNAVAILABLE = [
+  'auth/popup-blocked',
+  'auth/operation-not-supported-in-this-environment',
+  'auth/web-storage-unsupported',
+]
+
+export async function signInWithGoogle() {
+  try {
+    return await signInWithPopup(auth, googleProvider)
+  } catch (err) {
+    if (POPUP_UNAVAILABLE.includes(err?.code)) return signInWithRedirect(auth, googleProvider)
+    throw err
+  }
+}
+
+/** Errors from a redirect sign-in surface on the next page load */
+export const redirectSignInError = () => getRedirectResult(auth).then(() => null, err => err)
 export const signOutUser = () => signOut(auth)
 export { onAuthStateChanged }

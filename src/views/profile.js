@@ -6,13 +6,11 @@ import { showSnackbar } from './shelves.js'
 import { mountReadingGoal } from './reading-goal.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
-import { Chart, registerables } from 'chart.js'
+import { loadChart } from '../charts.js'
 import { chartColors, getThemePref, setThemePref } from '../theme.js'
 
-Chart.register(...registerables)
-Chart.defaults.font.family = 'Nunito, system-ui, sans-serif'
-Chart.defaults.font.size   = 12
-Chart.defaults.color       = '#44483d'
+// Set by buildCharts once Chart.js has loaded (see charts.js)
+let Chart = null
 
 const C = {
   primary:   '#98ab88',
@@ -236,6 +234,13 @@ function updateStats(container, books) {
 // ── Charts ────────────────────────────────────────────────────────────────────
 
 function buildCharts(container, books) {
+  if (!Chart) {
+    loadChart().then(c => {
+      Chart = c
+      if (container.isConnected) buildCharts(container, books)
+    })
+    return
+  }
   killCharts()
   Object.assign(C, chartColors())
   Chart.defaults.color = C.text

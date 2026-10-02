@@ -4,10 +4,11 @@ import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
 import { avatarButtonHTML, wireAvatar } from './topbar.js'
-import { Chart, registerables } from 'chart.js'
+import { loadChart } from '../charts.js'
 import { chartColors } from '../theme.js'
 
-Chart.register(...registerables)
+// Set once Chart.js has loaded (see charts.js)
+let Chart = null
 
 const C = {
   primary:   '#98ab88',
@@ -375,6 +376,7 @@ function openBotmPage(index, viewEl) {
 
   let current = index
   let chartInstances = []
+  let renderToken = 0
 
   function render(direction = null) {
     chartInstances.forEach(c => c?.destroy())
@@ -398,7 +400,12 @@ function openBotmPage(index, viewEl) {
       el.addEventListener('click', () => openBookDetail(others[i], 'read', () => render()))
     })
 
-    requestAnimationFrame(() => { chartInstances = mountMonthCharts(page, monthBooks) })
+    const token = ++renderToken
+    loadChart().then(c => {
+      Chart = c
+      // Skip if the page closed or moved to another pick while Chart.js loaded
+      if (token === renderToken && page.isConnected) chartInstances = mountMonthCharts(page, monthBooks)
+    })
   }
 
   // botmBooks is newest-first, so "older" moves forward through the list
