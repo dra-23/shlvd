@@ -72,7 +72,8 @@ export function renderBotm(container) {
         <div style="height:56px;display:flex;align-items:center;margin-left:12px;">
           <span class="top-bar-title" style="margin:0;">Book of the Month</span>
         </div>
-        <span style="margin-left:auto">${avatarButtonHTML()}</span>
+        <button class="icon-btn botm-view-toggle" id="botm-view-toggle" style="margin-left:auto"></button>
+        ${avatarButtonHTML()}
       </div>
 
       <div id="botm-content" style="padding:0 0 16px;flex:1;overflow-y:auto;">
@@ -86,6 +87,23 @@ export function renderBotm(container) {
   wireAvatar(container)
   const content = container.querySelector('#botm-content')
   let picks = null, allBooks = null
+
+  // List or cover wall, remembered on this device
+  const VIEW_KEY = 'shlvd-botm-view'
+  let view = 'list'
+  try { view = localStorage.getItem(VIEW_KEY) === 'wall' ? 'wall' : 'list' } catch {}
+  const toggle = container.querySelector('#botm-view-toggle')
+  const syncToggle = () => {
+    toggle.innerHTML = `<span class="material-symbols-rounded">${view === 'wall' ? 'view_agenda' : 'grid_view'}</span>`
+    toggle.setAttribute('aria-label', view === 'wall' ? 'Show as list' : 'Show as cover wall')
+  }
+  syncToggle()
+  toggle.addEventListener('click', () => {
+    view = view === 'wall' ? 'list' : 'wall'
+    try { localStorage.setItem(VIEW_KEY, view) } catch {}
+    syncToggle()
+    render()
+  })
 
   // Both watchers feed the list: picks for the cards, all books for
   // Book of the Year and the "choose from N books" counts on empty months
@@ -103,7 +121,7 @@ export function renderBotm(container) {
     }
     // Page navigation steps through dated picks newest-first, undated last
     botmBooks = [...picks.filter(b => b.dateCompleted), ...picks.filter(b => !b.dateCompleted)]
-    content.innerHTML = buildListHTML(botmBooks, allBooks)
+    content.innerHTML = buildListHTML(botmBooks, allBooks, view)
   }
 
   content.addEventListener('click', e => {
@@ -118,7 +136,7 @@ export function renderBotm(container) {
       if (book) openBookDetail(book, book.shelf, null)
       return
     }
-    const slot = e.target.closest('.botm-slot[data-year]')
+    const slot = e.target.closest('[data-year][data-month]') // list slot or wall tile
     if (slot) openPickChooser(Number(slot.dataset.year), Number(slot.dataset.month))
   })
 
@@ -134,7 +152,8 @@ export function renderBotm(container) {
 
 const monthKey = d => `${d.getFullYear()}-${d.getMonth()}`
 
-function buildListHTML(picks, allBooks) {
+function buildListHTML(picks, allBooks, view = 'list') {
+  const wall = view === 'wall'
   const dated = picks.filter(b => b.dateCompleted)
   const undated = picks.filter(b => !b.dateCompleted)
   const indexOf = book => picks.indexOf(book)
@@ -174,17 +193,22 @@ function buildListHTML(picks, allBooks) {
         <span class="botm-year-summary">${yearPicks.length} pick${yearPicks.length === 1 ? '' : 's'}${avg ? ` · ★ ${avg}` : ''}</span>
       </div>
       ${botySpotlightHTML(y, yearPicks, allBooks)}
-      <div class="botm-list">`
+      <div class="${wall ? 'botm-wall' : 'botm-list'}">`
 
     for (let m = lastMonth; m >= firstMonth; m--) {
       const k = `${y}-${m}`
       const monthPicks = picksByMonth.get(k)
-      if (monthPicks) {
+      const isCurrent = y === now.getFullYear() && m === now.getMonth()
+      if (wall) {
+        html += monthPicks
+          ? monthPicks.map(b => wallTileHTML(b, indexOf(b))).join('')
+          : emptyTileHTML(y, m, readByMonth.get(k) || 0, isCurrent)
+      } else if (monthPicks) {
         html += monthPicks.length > 1
           ? duoRowHTML(monthPicks, indexOf)
           : botmCardHTML(monthPicks[0], indexOf(monthPicks[0]))
       } else {
-        html += emptySlotHTML(y, m, readByMonth.get(k) || 0, y === now.getFullYear() && m === now.getMonth())
+        html += emptySlotHTML(y, m, readByMonth.get(k) || 0, isCurrent)
       }
     }
     html += `</div>`
@@ -193,9 +217,41 @@ function buildListHTML(picks, allBooks) {
   if (undated.length) {
     html += `
       <div class="botm-year-header"><span>No date</span></div>
-      <div class="botm-list">${undated.map(b => botmCardHTML(b, indexOf(b))).join('')}</div>`
+      <div class="${wall ? 'botm-wall' : 'botm-list'}">
+        ${undated.map(b => wall ? wallTileHTML(b, indexOf(b)) : botmCardHTML(b, indexOf(b))).join('')}
+      </div>`
   }
   return html
+}
+
+// ── Cover wall: one cover per month ──────────────────────────────────────────
+
+const shortMonth = (y, m) => new Date(y, m, 1).toLocaleDateString('en-US', { month: 'short' })
+
+function wallTileHTML(book, index) {
+  const d = book.dateCompleted
+  return `
+    <button class="botm-tile" data-index="${index}">
+      <div class="botm-tile-cover">
+        ${book.thumbnail
+          ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" loading="lazy" />`
+          : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`}
+        ${book.isBOTY ? `<span class="botm-tile-boty material-symbols-rounded" aria-label="Book of the Year">emoji_events</span>` : ''}
+      </div>
+      <span class="botm-tile-month">${d ? shortMonth(d.getFullYear(), d.getMonth()) : '—'}</span>
+    </button>`
+}
+
+function emptyTileHTML(year, month, readCount, isCurrent) {
+  const canPick = readCount > 0
+  return `
+    <div class="botm-tile botm-tile--empty ${canPick ? '' : 'botm-tile--none'}"
+      ${canPick ? `data-year="${year}" data-month="${month}" role="button" tabindex="0" aria-label="Choose a pick for ${shortMonth(year, month)}"` : ''}>
+      <div class="botm-tile-cover">
+        <span class="material-symbols-rounded">${isCurrent ? 'hourglass_top' : canPick ? 'add' : 'remove'}</span>
+      </div>
+      <span class="botm-tile-month">${shortMonth(year, month)}</span>
+    </div>`
 }
 
 // ── Months with more than one pick: one row, one card expanded ───────────────
@@ -381,6 +437,8 @@ function openBotmPage(index, viewEl) {
   function render(direction = null) {
     chartInstances.forEach(c => c?.destroy())
     const book = botmBooks[current]
+    // The pick can disappear if it was edited out of BotM — leave the page
+    if (!book) return closePage('manual')
     const monthBooks = booksReadInMonth(book.dateCompleted)
     page.innerHTML = buildPageHTML(book, monthBooks, current)
 
@@ -393,6 +451,16 @@ function openBotmPage(index, viewEl) {
 
     page.querySelector('.botm-back-btn').addEventListener('click', () => closePage('manual'))
     page.querySelector('.botm-older-btn')?.addEventListener('click', () => step('older'))
+    page.querySelector('.botm-edit-btn').addEventListener('click', () => {
+      // Re-render after saving. Find the pick by id — editing its finish
+      // date can move it in the list; if it's no longer a BotM, leave
+      openBookDetail(book, book.shelf, () => setTimeout(() => {
+        const i = botmBooks.findIndex(b => b.id === book.id)
+        if (i < 0) return closePage('manual')
+        current = i
+        render()
+      }, 50))
+    })
     page.querySelector('.botm-newer-btn')?.addEventListener('click', () => step('newer'))
 
     const others = monthBooks.filter(b => b.id !== book.id)
@@ -546,6 +614,9 @@ function buildPageHTML(book, monthBooks, index) {
         <span class="botm-page-kicker">Book of the Month${pickOf}</span>
         <span class="botm-page-title">${monthLabel}</span>
       </div>
+      <button class="icon-btn botm-edit-btn" aria-label="Edit book">
+        <span class="material-symbols-rounded">edit</span>
+      </button>
       <button class="icon-btn botm-older-btn" aria-label="Previous pick" ${hasOlder ? '' : 'disabled'}>
         <span class="material-symbols-rounded">chevron_left</span>
       </button>
