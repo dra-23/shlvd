@@ -69,6 +69,8 @@ export function renderLibrary(container) {
   let state = loadState()
   let books = []
   let query = ''
+  // Expanded series survive re-renders (e.g. after editing one of their books)
+  const openSeries = new Set()
 
   container.innerHTML = `
     <div class="shelves-root">
@@ -209,7 +211,7 @@ export function renderLibrary(container) {
     const countEl = controls.querySelector('#lib-count')
     if (countEl) countEl.textContent = `${list.length} series`
     results.innerHTML = list.length
-      ? `<div class="lib-series-list">${list.map(seriesCardHTML).join('')}</div>`
+      ? `<div class="lib-series-list">${list.map(s => seriesCardHTML(s, openSeries.has(s.name))).join('')}</div>`
       : `<div class="empty-state" style="padding-top:40px">
            <span class="material-symbols-rounded">collections_bookmark</span>
            <div class="empty-state-title">${all.length ? 'No series match' : 'No series yet'}</div>
@@ -240,6 +242,9 @@ export function renderLibrary(container) {
     if (expand) {
       const card = expand.closest('.series-card')
       const open = card.classList.toggle('open')
+      if (open) openSeries.add(card.dataset.series)
+      else openSeries.delete(card.dataset.series)
+      expand.setAttribute('aria-expanded', open)
       card.querySelector('.series-expand-btn .material-symbols-rounded').textContent = open ? 'expand_less' : 'expand_more'
       return
     }
@@ -379,34 +384,81 @@ function listRowHTML(book, sort) {
     </div>`
 }
 
-function seriesCardHTML(s) {
-  const pct = s.total ? Math.round(s.read / s.total * 100) : 0
+const MAX_SERIES_COVERS = 4
+const monthYear = d => d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+
+function seriesCoverHTML(book, extraClass = '') {
   return `
-    <div class="series-card">
-      <div class="series-card-header" role="button" tabindex="0">
-        <div class="series-card-info">
+    <div class="sc-cover ${extraClass} ${book.shelf === 'read' ? '' : 'sc-cover--unread'}">
+      ${book.thumbnail
+        ? `<img src="${esc(book.thumbnail)}" alt="" loading="lazy" />`
+        : `<span class="material-symbols-rounded">menu_book</span>`}
+    </div>`
+}
+
+// Collapsed: overlapping covers in series order plus progress and what's next.
+// Expanded: totals, when you read it, and every book with its status.
+function seriesCardHTML(s, isOpen = false) {
+  const pct = s.total ? Math.round(s.read / s.total * 100) : 0
+  const complete = s.read === s.total
+  const authors = [...new Set(s.books.map(b => b.author).filter(Boolean))]
+  // At most four slots, so the strip is the same width on every card;
+  // longer series show three covers and a "+N" tile
+  const shown = s.total > MAX_SERIES_COVERS ? s.books.slice(0, MAX_SERIES_COVERS - 1) : s.books
+  const more = s.total - shown.length
+
+  const read = s.books.filter(b => b.shelf === 'read')
+  const pages = s.books.reduce((n, b) => n + (b.pageCount || 0), 0)
+  const rated = read.filter(b => b.rating > 0)
+  const avg = rated.length ? (rated.reduce((n, b) => n + b.rating, 0) / rated.length).toFixed(1) : null
+  const dates = read.map(b => b.dateCompleted).filter(Boolean).sort((a, b) => a - b)
+  const span = !dates.length ? ''
+    : complete ? `Read ${monthYear(dates[0])}${dates.length > 1 && monthYear(dates.at(-1)) !== monthYear(dates[0]) ? ` – ${monthYear(dates.at(-1))}` : ''}`
+    : `Started ${monthYear(dates[0])} · last read ${monthYear(dates.at(-1))}`
+
+  return `
+    <div class="series-card ${isOpen ? 'open' : ''}" data-series="${esc(s.name)}">
+      <div class="series-card-header sc-header" role="button" tabindex="0" aria-expanded="${isOpen}">
+        <div class="sc-covers" style="--n:${shown.length + (more > 0 ? 1 : 0)}">
+          ${shown.map((b, i) => seriesCoverHTML(b, '')).join('')}
+          ${more > 0 ? `<div class="sc-cover sc-cover--more">+${more}</div>` : ''}
+        </div>
+        <div class="sc-info">
           <div class="series-card-name">${esc(s.name)}</div>
-          <div class="series-card-count">${s.read} of ${s.total} read</div>
+          ${authors.length ? `<div class="sc-author">${esc(authors.slice(0, 2).join(' & '))}${authors.length > 2 ? ' & more' : ''}</div>` : ''}
+          <div class="sc-progress">
+            <div class="series-progress-bar"><div class="series-progress-fill" style="width:${pct}%"></div></div>
+            <span>${s.read}/${s.total}</span>
+          </div>
+          ${s.next
+            ? `<div class="sc-next">Next: ${s.next.seriesNumber ? `#${esc(s.next.seriesNumber)} ` : ''}${esc(s.next.title)}</div>`
+            : complete
+              ? `<div class="sc-next sc-next--done"><span class="material-symbols-rounded">check_circle</span>Complete</div>`
+              : ''}
         </div>
         <span class="icon-btn series-expand-btn" aria-hidden="true">
-          <span class="material-symbols-rounded">expand_more</span>
+          <span class="material-symbols-rounded">${isOpen ? 'expand_less' : 'expand_more'}</span>
         </span>
       </div>
-      <div class="series-progress-bar"><div class="series-progress-fill" style="width:${pct}%"></div></div>
-      ${s.next ? `
-        <div class="series-next"><span class="material-symbols-rounded">auto_stories</span>
-          ${s.next.seriesNumber ? `#${esc(s.next.seriesNumber)} · ` : ''}${esc(s.next.title)}</div>`
-      : s.read === s.total ? `
-        <div class="series-next series-next-done"><span class="material-symbols-rounded">check_circle</span>All books read!</div>` : ''}
-      <div class="series-book-list">
+
+      <div class="series-book-list sc-details">
+        <div class="sc-stats">
+          <div><b>${s.total}</b><span>book${s.total === 1 ? '' : 's'}</span></div>
+          <div><b>${pages >= 1000 ? `${(pages / 1000).toFixed(1)}k` : pages || '—'}</b><span>pages</span></div>
+          <div><b>${avg ? `${avg}★` : '—'}</b><span>avg rating</span></div>
+        </div>
+        ${span ? `<div class="sc-span"><span class="material-symbols-rounded">calendar_month</span>${span}</div>` : ''}
         ${s.books.map(b => `
-          <div class="series-book-row" data-book-id="${esc(b.id)}" role="button" tabindex="0">
-            <div class="series-book-cover">${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="" loading="lazy" />` : ''}</div>
-            <div class="series-book-info">
-              ${b.seriesNumber ? `<span class="series-book-num">#${esc(b.seriesNumber)}</span>` : ''}
-              <span class="series-book-title">${esc(b.title)}</span>
+          <div class="series-book-row sc-book ${b === s.next ? 'sc-book--next' : ''}" data-book-id="${esc(b.id)}" role="button" tabindex="0">
+            ${seriesCoverHTML(b, 'sc-cover--row')}
+            <div class="sc-book-info">
+              <span class="sc-book-title">${b.seriesNumber ? `<span class="sc-book-num">#${esc(b.seriesNumber)}</span> ` : ''}${esc(b.title)}</span>
+              <span class="sc-book-meta">
+                ${b.rating ? `<span class="lib-row-stars">${'★'.repeat(b.rating)}</span>` : ''}
+                ${b.dateCompleted ? `Finished ${monthYear(b.dateCompleted)}` : b.pageCount ? `${b.pageCount} pages` : ''}
+              </span>
             </div>
-            <span class="series-book-badge ${b.shelf === 'read' ? 'series-badge-read' : 'series-badge-other'}">${SHELF_BADGE[b.shelf]}</span>
+            <span class="sc-badge sc-badge--${b === s.next ? 'next' : b.shelf}">${b === s.next ? 'Up next' : SHELF_BADGE[b.shelf]}</span>
           </div>`).join('')}
       </div>
     </div>`
