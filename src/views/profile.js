@@ -4,6 +4,7 @@ import { watchAllBooks, getBook, updateBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
 import { mountReadingGoal } from './reading-goal.js'
+import { drawYearCard, shareImage } from '../share.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 import { loadChart } from '../charts.js'
@@ -606,6 +607,10 @@ function openYearInReview(books) {
         <div class="sheet-meta" style="flex:1;">
           <div class="sheet-title" style="font-size:1.1rem;">Year in Review</div>
         </div>
+        ${bookCount ? `
+        <button class="icon-btn" id="yir-share" aria-label="Share as image">
+          <span class="material-symbols-rounded">ios_share</span>
+        </button>` : ''}
         <button class="icon-btn" id="yir-close">
           <span class="material-symbols-rounded">close</span>
         </button>
@@ -653,13 +658,13 @@ function openYearInReview(books) {
             ${topGenre ? `
             <div class="yir-detail-row">
               <span class="yir-detail-label">Top Genre</span>
-              <span class="yir-detail-value">${topGenre[0]}</span>
+              <span class="yir-detail-value">${esc(topGenre[0])}</span>
             </div>` : ''}
 
             ${topAuthor ? `
             <div class="yir-detail-row">
               <span class="yir-detail-label">Top Author</span>
-              <span class="yir-detail-value">${topAuthor[0]}</span>
+              <span class="yir-detail-value">${esc(topAuthor[0])}</span>
             </div>` : ''}
 
             ${bestBook ? `
@@ -678,6 +683,23 @@ function openYearInReview(books) {
     `
 
     sheet.querySelector('#yir-close').addEventListener('click', () => closeSheet('manual'))
+    sheet.querySelector('#yir-share')?.addEventListener('click', async e => {
+      const btn = e.currentTarget
+      btn.disabled = true
+      try {
+        const stats = {
+          bookCount, pageCount, avgRating,
+          topGenre: topGenre?.[0], topAuthor: topAuthor?.[0], bestBook,
+          botmCount: readThisYear.filter(b => b.isBOTM).length,
+          bookOfYear: books.find(b => b.isBOTY && (b.botyYear ?? b.dateCompleted?.getFullYear()) === year),
+        }
+        const result = await shareImage(await drawYearCard(year, stats), `shlvd-${year}-in-books.jpg`, `My ${year} in books`)
+        if (result === 'downloaded') showSnackbar('Image saved')
+      } catch (err) {
+        console.error(err)
+        showSnackbar('Couldn’t create the image')
+      } finally { btn.disabled = false }
+    })
     sheet.querySelector('#yir-prev').addEventListener('click', () => { year--; render() })
     sheet.querySelector('#yir-next').addEventListener('click', () => { year++; render() })
   }

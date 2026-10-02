@@ -3,6 +3,7 @@ import { watchBotm, watchAllBooks, updateBook } from '../db.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
+import { drawBotmCard, shareImage } from '../share.js'
 import { avatarButtonHTML, wireAvatar } from './topbar.js'
 import { loadChart } from '../charts.js'
 import { chartColors } from '../theme.js'
@@ -227,6 +228,7 @@ function buildListHTML(picks, allBooks, view = 'list') {
 // ── Cover wall: one cover per month ──────────────────────────────────────────
 
 const shortMonth = (y, m) => new Date(y, m, 1).toLocaleDateString('en-US', { month: 'short' })
+const longMonth  = (y, m) => new Date(y, m, 1).toLocaleDateString('en-US', { month: 'long' })
 
 function wallTileHTML(book, index) {
   const d = book.dateCompleted
@@ -238,7 +240,7 @@ function wallTileHTML(book, index) {
           : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`}
         ${book.isBOTY ? `<span class="botm-tile-boty material-symbols-rounded" aria-label="Book of the Year">emoji_events</span>` : ''}
       </div>
-      <span class="botm-tile-month">${d ? shortMonth(d.getFullYear(), d.getMonth()) : '—'}</span>
+      <span class="botm-tile-month">${d ? longMonth(d.getFullYear(), d.getMonth()) : '—'}</span>
     </button>`
 }
 
@@ -250,7 +252,7 @@ function emptyTileHTML(year, month, readCount, isCurrent) {
       <div class="botm-tile-cover">
         <span class="material-symbols-rounded">${isCurrent ? 'hourglass_top' : canPick ? 'add' : 'remove'}</span>
       </div>
-      <span class="botm-tile-month">${shortMonth(year, month)}</span>
+      <span class="botm-tile-month">${longMonth(year, month)}</span>
     </div>`
 }
 
@@ -451,6 +453,20 @@ function openBotmPage(index, viewEl) {
 
     page.querySelector('.botm-back-btn').addEventListener('click', () => closePage('manual'))
     page.querySelector('.botm-older-btn')?.addEventListener('click', () => step('older'))
+    page.querySelector('.botm-share-btn').addEventListener('click', async e => {
+      const btn = e.currentTarget
+      btn.disabled = true
+      try {
+        const d = book.dateCompleted
+        const stamp = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : 'pick'
+        const result = await shareImage(await drawBotmCard(book, monthBooks),
+          `shlvd-botm-${stamp}.jpg`, `My Book of the Month: ${book.title}`)
+        if (result === 'downloaded') showSnackbar('Image saved')
+      } catch (err) {
+        console.error(err)
+        showSnackbar('Couldn’t create the image')
+      } finally { btn.disabled = false }
+    })
     page.querySelector('.botm-edit-btn').addEventListener('click', () => {
       // Re-render after saving. Find the pick by id — editing its finish
       // date can move it in the list; if it's no longer a BotM, leave
@@ -614,6 +630,9 @@ function buildPageHTML(book, monthBooks, index) {
         <span class="botm-page-kicker">Book of the Month${pickOf}</span>
         <span class="botm-page-title">${monthLabel}</span>
       </div>
+      <button class="icon-btn botm-share-btn" aria-label="Share as image">
+        <span class="material-symbols-rounded">ios_share</span>
+      </button>
       <button class="icon-btn botm-edit-btn" aria-label="Edit book">
         <span class="material-symbols-rounded">edit</span>
       </button>

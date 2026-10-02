@@ -3192,3 +3192,20 @@ html, body {
 /* BotM header: keep the title on one line next to the view toggle */
 .shelves-top .top-bar-title { white-space: nowrap; font-size: 1.25rem; }
 .botm-view-toggle { width: 40px; height: 40px; flex-shrink: 0; }
+
+/* Month names read at a glance: full name on the wall, larger badge on list cards */
+.botm-tile-month {
+  font-size: 0.875rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--md-on-surface);
+}
+.botm-tile--empty .botm-tile-month { color: var(--md-on-surface-variant); }
+.botm-month-badge {
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  letter-spacing: 0.6px;
+}
+/* Month page bar: compact icons so the month name keeps its room */
+.botm-page-bar .icon-btn { width: 40px; height: 40px; }
+.botm-page-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
