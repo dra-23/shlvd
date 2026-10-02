@@ -5,6 +5,7 @@ import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
 import { mountReadingGoal } from './reading-goal.js'
 import { drawYearCard, shareImage } from '../share.js'
+import { openManageGenres } from './manage-genres.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 import { loadChart } from '../charts.js'
@@ -55,6 +56,7 @@ export function renderProfile(container) {
   container.querySelector('#sign-out-btn').addEventListener('click', () => signOutUser())
   // Profile is opened from the avatar, so Back returns to whichever tab you came from
   container.querySelector('#profile-back').addEventListener('click', () => history.back())
+  container.querySelector('#manage-genres-btn').addEventListener('click', () => openManageGenres())
   initCalendar(container)
 
   let allBooks = []
@@ -852,6 +854,10 @@ function buildHTML(user) {
         <button class="btn btn-tonal" id="year-review-btn" style="width:100%; height:48px;">
           <span class="material-symbols-rounded">auto_stories</span>
           Year in Review
+        </button>
+        <button class="btn btn-tonal" id="manage-genres-btn" style="width:100%; height:48px;">
+          <span class="material-symbols-rounded">sell</span>
+          Manage genres
         </button>
         <button class="btn btn-outlined" id="sign-out-btn" style="width:100%; height:48px;">
           <span class="material-symbols-rounded">logout</span>

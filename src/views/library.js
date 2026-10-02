@@ -5,6 +5,7 @@ import { navigateTo } from '../main.js'
 import { avatarButtonHTML, wireTopBar } from './topbar.js'
 import { openSheet } from './sheet.js'
 import { bookCardHTML, coverImgHTML, groupSeries, SHELF_BADGE } from './shelves.js'
+import { openManageGenres } from './manage-genres.js'
 
 // Library tab ("Shlvd"): every book, with shelf chips, sort, filters and a
 // grid/list toggle, plus a Series view. The last view is remembered per device.
@@ -262,6 +263,7 @@ export function renderLibrary(container) {
     const changes = {}
     if (p.segment) changes.segment = p.segment
     if (p.shelf) Object.assign(changes, { segment: 'books', shelf: p.shelf, filters: NO_FILTERS })
+    if (p.filters) Object.assign(changes, { segment: 'books', filters: { ...NO_FILTERS, ...p.filters } })
     if (p.sort) changes.sort = p.sort
     if (Object.keys(changes).length) update(changes)
     if (p.focusSearch) requestAnimationFrame(() => search.focus())
@@ -273,6 +275,13 @@ export function renderLibrary(container) {
   const unsub = watchAllBooks(b => {
     const first = !books.length
     books = b
+    // A saved genre filter can outlive its genre (renamed or merged) — drop it
+    const inUse = new Set(books.map(x => x.genre))
+    const genres = state.filters.genres.filter(g => inUse.has(g))
+    if (genres.length !== state.filters.genres.length) {
+      state = { ...state, filters: { ...state.filters, genres } }
+      saveState(state)
+    }
     render(!first) // later snapshots (edits) keep your place in the list
   })
 
@@ -460,7 +469,10 @@ function openSortFilterSheet(books, state, onApply) {
 
       ${genres.length ? `
       <div class="filter-group">
-        <div class="bd-label">Genre</div>
+        <div class="filter-group-head">
+          <div class="bd-label">Genre</div>
+          <button class="btn btn-text filter-manage" id="filter-manage-genres">Manage genres</button>
+        </div>
         <div class="chips filter-genres" data-group="genres">
           ${genres.map(([g, n], i) => `<button class="chip ${i >= TOP_GENRES ? 'filter-extra' : ''}" data-value="${esc(g)}">
             ${esc(g)} <span class="lib-chip-count">${n}</span></button>`).join('')}
@@ -513,6 +525,11 @@ function openSortFilterSheet(books, state, onApply) {
       return
     }
     if (e.target.closest('#filter-clear')) { f = structuredClone(NO_FILTERS); return sync() }
+    if (e.target.closest('#filter-manage-genres')) {
+      close()
+      // Let this sheet's history entry unwind before opening the next one
+      return setTimeout(openManageGenres, 350)
+    }
     if (e.target.closest('#filter-apply')) { onApply({ sort, filters: f }); close() }
   })
 }

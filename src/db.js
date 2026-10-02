@@ -12,6 +12,7 @@ import {
   where,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore'
 
 const booksCol = () => collection(db, 'books')
@@ -178,6 +179,29 @@ export const getSeriesList = async () => {
   const set = new Set()
   snap.docs.forEach(d => { if (d.data().series) set.add(text(d.data().series)) })
   return Array.from(set).sort((a, b) => a.localeCompare(b))
+}
+
+/** Genres in use, most common first (for autocomplete and matching) */
+export const getGenreList = async () => {
+  const snap = await getDocs(booksCol())
+  const counts = new Map()
+  snap.docs.forEach(d => {
+    const g = text(d.data().genre).trim()
+    if (g) counts.set(g, (counts.get(g) || 0) + 1)
+  })
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([g]) => g)
+}
+
+/**
+ * Set the genre on many books at once. `changes` is [{ id, genre }].
+ * Firestore batches hold up to 500 writes, so larger sets are split.
+ */
+export const setGenres = async (changes) => {
+  for (let i = 0; i < changes.length; i += 450) {
+    const batch = writeBatch(db)
+    changes.slice(i, i + 450).forEach(({ id, genre }) => batch.update(doc(booksCol(), id), { genre }))
+    await commit(batch.commit())
+  }
 }
 
 /** Real-time listener for all books (used for stats) */

@@ -1,5 +1,6 @@
 import { esc, safeHTML } from '../escape.js'
-import { addBook, updateBook, removeBook, restoreBook, setBOTY, getSeriesList } from '../db.js'
+import { addBook, updateBook, removeBook, restoreBook, setBOTY, getSeriesList, getGenreList } from '../db.js'
+import { matchGenre } from '../genres.js'
 
 // Cached series list for autocomplete — invalidated on every save
 let _seriesCache = null
@@ -9,6 +10,25 @@ async function populateSeriesDatalist(sheet) {
   }
   const list = sheet.querySelector('#series-datalist')
   if (list) list.innerHTML = _seriesCache.map(s => `<option value="${esc(s)}">`).join('')
+}
+
+// Same for genres, so typing suggests the spellings already in use
+let _genreCache = null
+/** Call after genres change elsewhere (e.g. Manage genres) */
+export function invalidateGenreCache() { _genreCache = null }
+async function populateGenreDatalist(sheet, book) {
+  if (!_genreCache) {
+    try { _genreCache = await getGenreList() } catch { _genreCache = [] }
+  }
+  const list = sheet.querySelector('#genre-datalist')
+  if (list) list.innerHTML = _genreCache.map(g => `<option value="${esc(g)}">`).join('')
+
+  // A book from Search has Google's categories, which are often subject tags
+  // ("Brothers", "Amnesia"). Only pre-fill one that matches a genre you use.
+  const input = sheet.querySelector('#genre-input')
+  if (input && !input.value && book?.categories?.length) {
+    input.value = book.categories.map(c => matchGenre(c, _genreCache)).find(Boolean) || ''
+  }
 }
 import { showSnackbar } from './shelves.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
@@ -58,8 +78,9 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
     ? new Date(book.dateCompleted).getFullYear()
     : new Date().getFullYear()
 
-  // Populate series autocomplete asynchronously
+  // Populate series and genre autocomplete asynchronously
   populateSeriesDatalist(sheet)
+  populateGenreDatalist(sheet, book)
 
   // ── Shelf chips ───────────────────────────────────────
   sheet.querySelectorAll('.shelf-chip').forEach(chip => {
@@ -205,7 +226,8 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
         if (isBOTY) await setBOTY(book.id || book.googleBooksId, botyYear)
         showSnackbar('Updated')
       }
-      _seriesCache = null // invalidate so next open reflects new series names
+      _seriesCache = null // invalidate so next open reflects new series and genres
+      _genreCache = null
       closeSheet('manual')
       onDone?.()
     } catch (err) {
@@ -318,7 +340,7 @@ export function openManualAdd(onDone) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
           <div class="sheet-section-label">Genre</div>
-          <input type="text" class="manual-input" id="manual-genre" placeholder="e.g. Fiction" autocomplete="off" />
+          <input type="text" class="manual-input" id="manual-genre" list="genre-datalist" placeholder="e.g. Fiction" autocomplete="off" />
         </div>
         <div>
           <div class="sheet-section-label">Published</div>
@@ -332,6 +354,7 @@ export function openManualAdd(onDone) {
       </div>
 
       <datalist id="series-datalist"></datalist>
+      <datalist id="genre-datalist"></datalist>
       <div style="display:grid;grid-template-columns:1fr 72px;gap:12px;align-items:end;">
         <div>
           <div class="sheet-section-label">Series</div>
@@ -412,6 +435,7 @@ export function openManualAdd(onDone) {
   document.body.appendChild(sheet)
 
   populateSeriesDatalist(sheet)
+  populateGenreDatalist(sheet)
 
   // ── State ──────────────────────────────────────────────
   let selectedShelf = 'want'
@@ -495,6 +519,7 @@ export function openManualAdd(onDone) {
       }
 
       _seriesCache = null
+      _genreCache = null
       showSnackbar(`Added to ${SHELF_LABELS[selectedShelf]}`)
       closeSheet('manual')
       onDone?.()
@@ -633,11 +658,12 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
     <section class="bd-card">
       ${cardTitle('info', 'Details')}
       <datalist id="series-datalist"></datalist>
+      <datalist id="genre-datalist"></datalist>
       <div class="bd-rows">
         <label class="bd-row">
           <span class="bd-row-label">Genre</span>
-          <input type="text" class="bd-row-input" id="genre-input"
-            value="${esc(book.genre || book.categories?.[0])}" placeholder="Add genre" autocomplete="off" />
+          <input type="text" class="bd-row-input" id="genre-input" list="genre-datalist"
+            value="${esc(book.genre)}" placeholder="Add genre" autocomplete="off" />
         </label>
         <label class="bd-row">
           <span class="bd-row-label">Series</span>
