@@ -2,7 +2,7 @@ import { esc } from '../escape.js'
 import { auth } from '../firebase.js'
 import { watchAllBooks, updateBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
-import { showSnackbar, coverImgHTML } from './shelves.js'
+import { showSnackbar } from './shelves.js'
 import { mountReadingGoal } from './reading-goal.js'
 import { drawYearCard, shareImage } from '../share.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
@@ -12,34 +12,15 @@ import { openAuthorPage } from './author.js'
 import { openLibrary } from './library.js'
 import { openSheet } from './sheet.js'
 import { openSettingsPage } from './settings.js'
+import { openStatDetail, bookRowHTML, genreRowHTML } from './profile-detail.js'
+import {
+  DAY, MONTHS, MONTHS_LONG, short, plural, dayKey, avgRating, sumPages, weekIndex,
+  longestWeekStreak, yearChipsHTML, centreChip, genreSlots, genreBreakdown,
+} from '../stats.js'
 
 // Profile: your reading stats for one year (or all time). The year chips at
 // the top filter every section below them. Charts are plain HTML/SVG styled
 // from CSS variables, so they follow light/dark mode without redrawing.
-
-const DAY = 86400000
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-const GENRE_SLOTS = 5
-
-const short = n => n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
-const dayKey = d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-const avgRating = list => {
-  const rated = list.filter(b => b.rating > 0)
-  return rated.length ? rated.reduce((s, b) => s + b.rating, 0) / rated.length : null
-}
-const sumPages = list => list.reduce((s, b) => s + (b.pageCount > 0 ? b.pageCount : 0), 0)
-
-// Weeks since a fixed Sunday, so consecutive weeks differ by exactly 1
-const weekIndex = d => Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1970, 0, 4)) / (7 * DAY))
-
-function longestWeekStreak(list) {
-  const weeks = [...new Set(list.map(b => weekIndex(b.dateCompleted)))].sort((a, b) => a - b)
-  let best = 0, run = 0
-  weeks.forEach((w, i) => { run = i && w === weeks[i - 1] + 1 ? run + 1 : 1; best = Math.max(best, run) })
-  return best
-}
 
 export function renderProfile(container) {
   const now = new Date()
@@ -98,11 +79,7 @@ export function renderProfile(container) {
     return { list, days, label: cutoff ? 'this time last year' : String(year - 1) }
   }
 
-  function rankGenres() {
-    const counts = new Map()
-    read.forEach(b => { if (b.genre) counts.set(b.genre, (counts.get(b.genre) || 0) + 1) })
-    genreColour = new Map([...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, GENRE_SLOTS).map(([g], i) => [g, i]))
-  }
+  function rankGenres() { genreColour = genreSlots(read) }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -130,13 +107,7 @@ export function renderProfile(container) {
       : 'Your reading stats live here'
   }
 
-  function renderYears() {
-    const years = [...new Set([thisYear, ...read.map(b => b.dateCompleted.getFullYear())])].sort((a, b) => b - a)
-    $('#pf-years').innerHTML = [...years, 'all'].map(y => `
-      <button class="chip ${y === year ? 'selected' : ''}" data-year="${y}" aria-pressed="${y === year}">
-        ${y === 'all' ? 'All time' : y}
-      </button>`).join('')
-  }
+  function renderYears() { $('#pf-years').innerHTML = yearChipsHTML(read, year) }
 
   function renderYir() {
     const y = year === 'all' ? thisYear : year
@@ -216,7 +187,7 @@ export function renderProfile(container) {
     }
     const active = byDay.size
     el.innerHTML = `
-      <div class="pf-card-head"><h2>Reading activity</h2><span>${plural(active, 'day')} with a finished book</span></div>
+      <div class="pf-card-head"><h2>Reading activity</h2><span>${plural(active, 'day')} with a book</span><button class="icon-btn pf-expand" data-expand="activity" aria-label="Expand"><span class="material-symbols-rounded">open_in_full</span></button></div>
       <div class="hm-scroll">
         <div class="hm-months" style="--cols:${col}">${labels}</div>
         <div class="hm-grid" style="--cols:${col}">${cells}</div>
@@ -242,7 +213,7 @@ export function renderProfile(container) {
     const years = [...new Set(read.map(b => b.dateCompleted.getFullYear()))].sort((a, b) => b - a)
     const max = Math.max(1, ...counts.values())
     el.innerHTML = `
-      <div class="pf-card-head"><h2>Reading activity</h2><span>books per month</span></div>
+      <div class="pf-card-head"><h2>Reading activity</h2><span>books per month</span><button class="icon-btn pf-expand" data-expand="activity" aria-label="Expand"><span class="material-symbols-rounded">open_in_full</span></button></div>
       <div class="hm-year-grid">
         <span></span>${MONTHS.map(m => `<span class="hm-col-label">${m[0]}</span>`).join('')}
         ${years.map(y => `
@@ -312,7 +283,7 @@ export function renderProfile(container) {
     el._pages = pages
     const max = Math.max(1, ...counts)
     el.innerHTML = `
-      <div class="pf-card-head"><h2>${title}</h2><span>avg ${avg.toFixed(1)}</span></div>
+      <div class="pf-card-head"><h2>${title}</h2><span>avg ${avg.toFixed(1)}</span><button class="icon-btn pf-expand" data-expand="monthly" aria-label="Expand"><span class="material-symbols-rounded">open_in_full</span></button></div>
       <div class="pf-bars" style="--n:${counts.length}">
         ${avg ? `<div class="pf-avg" style="bottom:${avg / max * 100}%" aria-hidden="true"></div>` : ''}
         ${counts.map((n, i) => `
@@ -380,6 +351,7 @@ export function renderProfile(container) {
         <button class="icon-btn" data-cal-step="-1" aria-label="Previous month"><span class="material-symbols-rounded">chevron_left</span></button>
         <div class="pf-cal-title"><h2>${MONTHS_LONG[m]} ${y}</h2><span>${total ? plural(total, 'book') + ' finished' : 'No books finished'}</span></div>
         <button class="icon-btn" data-cal-step="1" aria-label="Next month"><span class="material-symbols-rounded">chevron_right</span></button>
+        <button class="icon-btn pf-expand" data-expand="calendar" aria-label="Expand"><span class="material-symbols-rounded">open_in_full</span></button>
       </div>
       <div class="pf-cal-grid">${cells}</div>
       <div class="pf-cal-list" id="pf-cal-list"></div>`
@@ -417,7 +389,7 @@ export function renderProfile(container) {
     const max = Math.max(1, ...counts)
     const avg = avgRating(list)
     el.innerHTML = `
-      <div class="pf-card-head"><h2>Ratings</h2><span>${avg ? `${avg.toFixed(1)}★ average` : 'No ratings yet'}</span></div>
+      <div class="pf-card-head"><h2>Ratings</h2><span>${avg ? `${avg.toFixed(1)}★ average` : 'No ratings yet'}</span><button class="icon-btn pf-expand" data-expand="ratings" aria-label="Expand"><span class="material-symbols-rounded">open_in_full</span></button></div>
       ${[5, 4, 3, 2, 1].map((s, i) => `
         <button class="pf-hbar-row" data-rating="${s}" ${counts[i] ? '' : 'disabled'}
           aria-label="${s} stars: ${plural(counts[i], 'book')}">
@@ -461,7 +433,7 @@ export function renderProfile(container) {
     const top = [...stats.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 5)
     const max = top[0]?.count || 1
     el.innerHTML = `
-      <div class="pf-card-head"><h2>Top authors</h2><span>${plural(stats.size, 'author')}</span></div>
+      <div class="pf-card-head"><h2>Top authors</h2><span>${plural(stats.size, 'author')}</span><button class="icon-btn pf-expand" data-expand="authors" aria-label="Expand"><span class="material-symbols-rounded">open_in_full</span></button></div>
       ${top.length ? top.map(a => {
         const avg = avgRating(a.list)
         return `
@@ -481,51 +453,24 @@ export function renderProfile(container) {
 
   function renderGenres() {
     const el = $('#pf-genres')
-    const counts = new Map()
     const list = periodBooks()
-    list.forEach(b => { if (b.genre) counts.set(b.genre, (counts.get(b.genre) || 0) + 1) })
-    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
-    const top = sorted.slice(0, GENRE_SLOTS)
-    const other = sorted.slice(GENRE_SLOTS).reduce((s, [, n]) => s + n, 0)
-    const total = sorted.reduce((s, [, n]) => s + n, 0)
-
-    // Each genre keeps its all-time colour; genres outside the all-time top
-    // five borrow a slot no other genre on screen is using
-    const used = new Set(top.map(([g]) => genreColour.get(g)).filter(i => i !== undefined))
-    const free = [...Array(GENRE_SLOTS).keys()].filter(i => !used.has(i))
-    const slots = top.map(([g]) => genreColour.has(g) ? genreColour.get(g) : free.shift())
-
-    const rows = [...top.map(([g, n], i) => ({ g, n, colour: `var(--genre-${slots[i] + 1})` })),
-      ...(other ? [{ g: 'Other', n: other, colour: 'var(--genre-other)', other: true }] : [])]
+    const all = genreBreakdown(list, genreColour)
+    const top = all.slice(0, GENRE_SLOTS_SHOWN)
+    const other = all.slice(GENRE_SLOTS_SHOWN).reduce((s, r) => s + r.count, 0)
+    const total = all.reduce((s, r) => s + r.count, 0)
+    const rows = [...top, ...(other ? [{ genre: 'Other', count: other, colour: 'var(--genre-other)', other: true }] : [])]
     el.innerHTML = `
-      <div class="pf-card-head"><h2>Genres</h2><span>${plural(counts.size, 'genre')}</span></div>
+      <div class="pf-card-head"><h2>Genres</h2><span>${plural(all.length, 'genre')}</span><button class="icon-btn pf-expand" data-expand="genres" aria-label="Expand"><span class="material-symbols-rounded">open_in_full</span></button></div>
       ${total ? `
-        <div class="pf-stack" role="img" aria-label="${esc(rows.map(r => `${r.g} ${Math.round(r.n / total * 100)}%`).join(', '))}">
-          ${rows.map(r => `<span style="flex:${r.n};background:${r.colour}"></span>`).join('')}
+        <div class="pf-stack" role="img" aria-label="${esc(rows.map(r => `${r.genre} ${Math.round(r.count / total * 100)}%`).join(', '))}">
+          ${rows.map(r => `<span style="flex:${r.count};background:${r.colour}"></span>`).join('')}
         </div>
-        ${rows.map(r => `
-          <${r.other ? 'div' : 'button'} class="pf-genre-row" ${r.other ? '' : `data-genre="${esc(r.g)}"`}>
-            <span class="pf-swatch" style="background:${r.colour}"></span>
-            <span class="pf-genre-name">${esc(r.g)}</span>
-            <span class="pf-genre-count">${r.n} · ${Math.round(r.n / total * 100)}%</span>
-            ${r.other ? '' : '<span class="material-symbols-rounded pf-chevron">chevron_right</span>'}
-          </${r.other ? 'div' : 'button'}>`).join('')}
+        ${rows.map(r => genreRowHTML(r, total)).join('')}
         ${list.length - total ? `<div class="pf-foot">${list.length - total} without a genre</div>` : ''}`
       : '<div class="pf-foot">No genres yet</div>'}`
   }
 
   // ── Shared bits ───────────────────────────────────────────────────────────
-
-  function bookRowHTML(b) {
-    return `
-      <button class="pf-book-row" data-open-book="${esc(b.id)}">
-        <span class="pf-book-row-cover">${coverImgHTML(b)}</span>
-        <span class="pf-book-row-text">
-          <span class="pf-book-row-title">${esc(b.title)}</span>
-          <span class="pf-book-row-sub">${esc(b.author)} · ${b.dateCompleted.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-        </span>
-      </button>`
-  }
 
   function openBook(book) {
     if (book) openBookDetail(book, book.shelf, null)
@@ -539,9 +484,7 @@ export function renderProfile(container) {
       cal = { y, m: y === thisYear ? now.getMonth() : months.length ? Math.max(...months) : 11 }
     }
     renderAll()
-    // Bring the chip into view sideways only (scrollIntoView would also scroll the app shell)
-    const row = $('#pf-years'), chip = row.querySelector(`[data-year="${y}"]`)
-    if (chip) row.scrollTo({ left: chip.offsetLeft - row.clientWidth / 2 + chip.offsetWidth / 2, behavior: 'smooth' })
+    centreChip($('#pf-years'), y)
   }
 
   scroller.addEventListener('click', e => {
@@ -562,6 +505,13 @@ export function renderProfile(container) {
     if (rating) return openRatingSheet(Number(rating.dataset.rating))
     const author = t.closest('[data-author]')
     if (author) return openAuthorPage(author.dataset.author)
+    const expandBtn = t.closest('[data-expand]')
+    if (expandBtn) {
+      return openStatDetail(expandBtn.dataset.expand, {
+        books, read, year, cal, genreColour,
+        onClose: y => { if (y !== year) setYear(y) },
+      })
+    }
     const genre = t.closest('[data-genre]')
     if (genre) return openLibrary({ shelf: 'read', filters: { genres: [genre.dataset.genre], years: year === 'all' ? [] : [year] } })
   })
@@ -570,6 +520,8 @@ export function renderProfile(container) {
 }
 
 export function destroyProfile() {}
+
+const GENRE_SLOTS_SHOWN = 5
 
 // ── HTML ──────────────────────────────────────────────────────────────────────
 
