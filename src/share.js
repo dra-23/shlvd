@@ -1,6 +1,6 @@
 // Story-sized (1080×1920) share cards drawn on a canvas.
-// Google Books covers can't be drawn into an exportable canvas (no CORS), so
-// the book is shown as a typographic "cover" instead of the cover photo.
+// Covers come through an image proxy when possible (see drawableCoverUrl);
+// otherwise the book is shown as a typographic "cover".
 
 const W = 1080, H = 1920
 const GOLD = '#F5A623'
@@ -198,9 +198,53 @@ export async function drawBotmCard(book, monthBooks) {
   return finish(canvas)
 }
 
-/** Card summarising a year of reading */
+// Google Books covers block canvas export, so they're fetched through the
+// wsrv.nl image proxy, which adds CORS headers (only the public cover URL is
+// sent). Open Library covers allow cross-origin use directly.
+export function drawableCoverUrl(src, width = 300, big = false) {
+  if (!src) return null
+  const url = src.replace(/^http:/, 'https:')
+  if (url.includes('covers.openlibrary.org')) return url
+  const source = url.includes('books.google') && big
+    ? url.replace(/zoom=\d/, 'zoom=0').replace('&edge=curl', '')
+    : url.replace('&edge=curl', '')
+  return `https://wsrv.nl/?url=${encodeURIComponent(source)}&w=${width}&output=jpg`
+}
+
+// Real cover when it loads, typographic stand-in when it doesn't
+function drawCover(ctx, img, book, x, y, w, h, r = 12) {
+  if (!img) return typographicBook(ctx, book, x, y, w, h)
+  ctx.save()
+  ctx.shadowColor = 'rgba(0,0,0,0.4)'
+  ctx.shadowBlur = Math.max(12, w * 0.12)
+  ctx.shadowOffsetY = Math.max(6, w * 0.05)
+  roundRect(ctx, x, y, w, h, r)
+  ctx.fillStyle = '#2f4229'
+  ctx.fill()
+  ctx.restore()
+  ctx.save()
+  roundRect(ctx, x, y, w, h, r)
+  ctx.clip()
+  const s = Math.max(w / img.width, h / img.height)
+  ctx.drawImage(img, x + (w - img.width * s) / 2, y + (h - img.height * s) / 2, img.width * s, img.height * s)
+  ctx.restore()
+}
+
+// Gives up after a few seconds so a slow proxy can't hang the share button
+function loadCover(src) {
+  return Promise.race([loadDrawableImage(src), new Promise(r => setTimeout(() => r(null), 6000))])
+}
+
+/** Card summarising a year of reading, with real covers where possible */
 export async function drawYearCard(year, s) {
   await ensureFonts()
+  const fav = s.bookOfYear || s.bestBook
+  const highlights = (s.highlights || []).slice(0, 12)
+  const [favImg, ...tileImgs] = await Promise.all([
+    fav ? loadCover(drawableCoverUrl(fav.thumbnail, 500, true)) : null,
+    ...highlights.map(b => loadCover(drawableCoverUrl(b.thumbnail, 300))),
+  ])
+
   const canvas = document.createElement('canvas')
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')
@@ -208,66 +252,94 @@ export async function drawYearCard(year, s) {
 
   ctx.textAlign = 'center'
   ctx.fillStyle = GOLD
-  ctx.font = font(800, 40)
+  ctx.font = font(800, 38)
   ctx.letterSpacing = '6px'
-  ctx.fillText('MY YEAR IN BOOKS', W / 2, 190)
+  ctx.fillText('MY YEAR IN BOOKS', W / 2, 150)
   ctx.letterSpacing = '0px'
   ctx.fillStyle = CREAM
-  ctx.font = font(800, 120)
-  ctx.fillText(String(year), W / 2, 330)
+  ctx.font = font(800, 110)
+  ctx.fillText(String(year), W / 2, 265)
 
-  ctx.font = font(800, 300)
-  ctx.fillText(String(s.bookCount), W / 2, 640)
-  ctx.font = font(700, 52)
+  ctx.font = font(800, 230)
+  ctx.fillText(String(s.bookCount), W / 2, 495)
+  ctx.font = font(700, 48)
   ctx.fillStyle = 'rgba(246,248,242,0.8)'
-  ctx.fillText(`book${s.bookCount === 1 ? '' : 's'} finished`, W / 2, 720)
+  ctx.fillText(`book${s.bookCount === 1 ? '' : 's'} finished`, W / 2, 570)
 
-  statsRow(ctx, [[short(s.pageCount), 'pages'], [s.avgRating ? `${s.avgRating}★` : '—', 'avg rating'], [String(s.botmCount), 'BotM picks']], 870)
+  statsRow(ctx, [[short(s.pageCount), 'pages'], [s.avgRating ? `${s.avgRating}★` : '—', 'avg rating'], [String(s.botmCount), 'BotM picks']], 700)
 
-  // Detail rows
-  const rows = [['Top genre', s.topGenre], ['Top author', s.topAuthor]].filter(r => r[1])
-  let y = 1040
-  rows.forEach(([label, value]) => {
-    ctx.strokeStyle = 'rgba(246,248,242,0.18)'
-    ctx.lineWidth = 2
-    ctx.beginPath(); ctx.moveTo(110, y - 62); ctx.lineTo(W - 110, y - 62); ctx.stroke()
-    ctx.textAlign = 'left'
-    ctx.fillStyle = 'rgba(246,248,242,0.7)'
-    ctx.font = font(700, 38)
-    ctx.fillText(label, 110, y)
-    ctx.textAlign = 'right'
+  // Top genre / top author side by side
+  const details = [['Top genre', s.topGenre], ['Top author', s.topAuthor]].filter(r => r[1])
+  details.forEach(([label, value], i) => {
+    const colW = (W - 160) / details.length
+    const cx = 80 + colW * i + colW / 2
+    ctx.textAlign = 'center'
+    ctx.fillStyle = 'rgba(246,248,242,0.65)'
+    ctx.font = font(700, 30)
+    ctx.fillText(label, cx, 850)
     ctx.fillStyle = CREAM
-    ctx.font = font(800, 42)
-    ctx.fillText(wrap(ctx, value, 560, 1)[0], W - 110, y)
-    y += 110
+    ctx.font = font(800, 40)
+    ctx.fillText(wrap(ctx, value, colW - 40, 1)[0], cx, 902)
   })
-
-  // Favourite read / Book of the Year panel
-  const fav = s.bookOfYear || s.bestBook
-  if (fav) {
-    const px = 90, py = y + 10, pw = W - 180, ph = 1700 - py
-    ctx.fillStyle = 'rgba(255,255,255,0.1)'
-    roundRect(ctx, px, py, pw, ph, 36)
-    ctx.fill()
-    const bookW = Math.min(300, (ph - 80) / 1.47)
-    typographicBook(ctx, fav, px + 50, py + (ph - bookW * 1.47) / 2, bookW, bookW * 1.47)
-    const tx = px + 50 + bookW + 50, tw = pw - bookW - 150
-    ctx.textAlign = 'left'
-    ctx.fillStyle = GOLD
-    ctx.font = font(800, 32)
-    ctx.letterSpacing = '4px'
-    ctx.fillText(s.bookOfYear ? 'BOOK OF THE YEAR' : 'FAVOURITE READ', tx, py + ph / 2 - 90)
-    ctx.letterSpacing = '0px'
-    ctx.fillStyle = CREAM
-    ctx.font = font(800, 50)
-    let ly = py + ph / 2 - 20
-    wrap(ctx, fav.title, tw, 3).forEach(l => { ctx.fillText(l, tx, ly); ly += 60 })
-    ctx.fillStyle = 'rgba(246,248,242,0.8)'
-    ctx.font = font(700, 36)
-    ctx.fillText(wrap(ctx, fav.author, tw, 1)[0], tx, ly + 8)
+  if (details.length === 2) {
+    ctx.strokeStyle = 'rgba(246,248,242,0.2)'
+    ctx.lineWidth = 2
+    ctx.beginPath(); ctx.moveTo(W / 2, 820); ctx.lineTo(W / 2, 912); ctx.stroke()
   }
 
-  wordmark(ctx, 1840)
+  // Favourite read / Book of the Year
+  let y = 965
+  if (fav) {
+    const px = 90, pw = W - 180, ph = 380
+    ctx.fillStyle = 'rgba(255,255,255,0.1)'
+    roundRect(ctx, px, y, pw, ph, 36)
+    ctx.fill()
+    const bh = ph - 70, bw = Math.round(bh / 1.5)
+    drawCover(ctx, favImg, fav, px + 40, y + 35, bw, bh, 14)
+    const tx = px + 40 + bw + 44, tw = pw - bw - 124
+    ctx.textAlign = 'left'
+    ctx.fillStyle = GOLD
+    ctx.font = font(800, 30)
+    ctx.letterSpacing = '4px'
+    ctx.fillText(s.bookOfYear ? 'BOOK OF THE YEAR' : 'FAVOURITE READ', tx, y + 110)
+    ctx.letterSpacing = '0px'
+    ctx.fillStyle = CREAM
+    ctx.font = font(800, 48)
+    let ly = y + 178
+    wrap(ctx, fav.title, tw, 3).forEach(l => { ctx.fillText(l, tx, ly); ly += 58 })
+    ctx.fillStyle = 'rgba(246,248,242,0.8)'
+    ctx.font = font(700, 34)
+    ctx.fillText(wrap(ctx, fav.author, tw, 1)[0], tx, ly + 4)
+    if (fav.rating) {
+      ctx.textAlign = 'left'
+      ctx.font = font(800, 40)
+      ctx.fillStyle = GOLD
+      ctx.fillText('★'.repeat(fav.rating), tx, ly + 64)
+    }
+    y += ph
+  }
+
+  // Cover wall: Books of the Month first, then the best of the rest
+  if (highlights.length) {
+    const allBotm = highlights.every(b => b.isBOTM)
+    ctx.textAlign = 'center'
+    ctx.fillStyle = GOLD
+    ctx.font = font(800, 30)
+    ctx.letterSpacing = '5px'
+    ctx.fillText(allBotm ? 'MY BOOKS OF THE MONTH' : 'HIGHLIGHTS', W / 2, y + 74)
+    ctx.letterSpacing = '0px'
+    const cols = 6, gap = 14, tw = 128, th = 188
+    const rows = Math.ceil(highlights.length / cols)
+    const top = y + 100 + (rows === 1 ? 100 : 0)
+    highlights.forEach((b, i) => {
+      const row = Math.floor(i / cols), inRow = Math.min(cols, highlights.length - row * cols)
+      const rowW = inRow * tw + (inRow - 1) * gap
+      const x = (W - rowW) / 2 + (i % cols) * (tw + gap)
+      drawCover(ctx, tileImgs[i], b, x, top + row * (th + gap), tw, th, 8)
+    })
+  }
+
+  wordmark(ctx, 1895)
   return finish(canvas)
 }
 

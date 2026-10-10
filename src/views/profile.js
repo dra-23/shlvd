@@ -2,7 +2,7 @@ import { esc } from '../escape.js'
 import { auth } from '../firebase.js'
 import { watchAllBooks, updateBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
-import { showSnackbar } from './shelves.js'
+import { showSnackbar, coverImgHTML } from './shelves.js'
 import { mountReadingGoal } from './reading-goal.js'
 import { drawYearCard, shareImage } from '../share.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
@@ -693,6 +693,13 @@ function openYearInReview(books, startYear = new Date().getFullYear()) {
       : null
 
     const starsHTML = n => '★'.repeat(n) + '☆'.repeat(5 - n)
+    const bookOfYear = books.find(b => b.isBOTY && (b.botyYear ?? b.dateCompleted?.getFullYear()) === year)
+    const featured = bookOfYear || bestBook
+    // Cover wall: Books of the Month in month order, then the best of the rest
+    const botm = readThisYear.filter(b => b.isBOTM && b !== featured).sort((a, b) => a.dateCompleted - b.dateCompleted)
+    const rest = readThisYear.filter(b => !b.isBOTM && b !== featured && b.thumbnail)
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0) || b.dateCompleted - a.dateCompleted)
+    const highlights = [...botm, ...rest].slice(0, 12)
 
     sheet.innerHTML = `
       <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
@@ -760,13 +767,20 @@ function openYearInReview(books, startYear = new Date().getFullYear()) {
               <span class="yir-detail-value">${esc(topAuthor[0])}</span>
             </div>` : ''}
 
-            ${bestBook ? `
+            ${featured ? `
             <div class="yir-best-book">
-              <div class="yir-best-label">Favourite read</div>
-              <div class="yir-best-title">${esc(bestBook.title)}</div>
-              <div class="yir-best-author">${esc(bestBook.author)}</div>
-              <div class="yir-best-stars">${starsHTML(bestBook.rating)}</div>
+              <div class="yir-best-cover">${coverImgHTML(featured)}</div>
+              <div class="yir-best-text">
+                <div class="yir-best-label">${bookOfYear ? 'Book of the Year' : 'Favourite read'}</div>
+                <div class="yir-best-title">${esc(featured.title)}</div>
+                <div class="yir-best-author">${esc(featured.author)}</div>
+                ${featured.rating ? `<div class="yir-best-stars">${starsHTML(featured.rating)}</div>` : ''}
+              </div>
             </div>` : ''}
+
+            ${highlights.length ? `
+            <div class="yir-best-label yir-wall-label">${highlights.every(b => b.isBOTM) ? 'Books of the Month' : 'Highlights'}</div>
+            <div class="yir-wall">${highlights.map(b => `<div class="yir-wall-cover">${coverImgHTML(b)}</div>`).join('')}</div>` : ''}
           `}
 
           <div class="yir-footer">shlvd</div>
@@ -782,10 +796,10 @@ function openYearInReview(books, startYear = new Date().getFullYear()) {
       try {
         const stats = {
           bookCount, pageCount, avgRating,
-          topGenre: topGenre?.[0], topAuthor: topAuthor?.[0], bestBook,
+          topGenre: topGenre?.[0], topAuthor: topAuthor?.[0], bestBook, bookOfYear, highlights,
           botmCount: readThisYear.filter(b => b.isBOTM).length,
-          bookOfYear: books.find(b => b.isBOTY && (b.botyYear ?? b.dateCompleted?.getFullYear()) === year),
         }
+        showSnackbar('Creating image…')
         const result = await shareImage(await drawYearCard(year, stats), `shlvd-${year}-in-books.jpg`, `My ${year} in books`)
         if (result === 'downloaded') showSnackbar('Image saved')
       } catch (err) {

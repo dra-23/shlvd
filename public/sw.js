@@ -31,7 +31,9 @@ self.addEventListener('fetch', e => {
     url.includes('wikipedia.org/api/') ||
     url.includes('wikipedia.org/w/api.php') ||
     url.includes('openlibrary.org/search/') ||
-    url.includes('openlibrary.org/authors/')
+    url.includes('openlibrary.org/authors/') ||
+    // Share-card covers: only fetched while making an image
+    url.includes('wsrv.nl')
   ) return
 
   // Network-first for HTML so updates are always picked up
