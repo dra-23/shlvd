@@ -3,6 +3,7 @@ import { searchBooks } from '../books-api.js'
 import { getBook } from '../db.js'
 import { openBookDetail, openManualAdd } from './book-detail.js'
 import { avatarButtonHTML, wireTopBar } from './topbar.js'
+import { mountForYou } from './for-you.js'
 
 const SHELF_BADGE = { want: 'Want', reading: 'Reading', read: 'Read' }
 
@@ -50,6 +51,13 @@ export function renderSearch(container) {
   const results = container.querySelector('#search-results')
 
   let debounceTimer = null
+  let forYou = null
+  const showForYou = () => {
+    forYou?.()
+    results.innerHTML = '<div id="for-you"></div>'
+    forYou = mountForYou(results.querySelector('#for-you'))
+  }
+  const hideForYou = () => { forYou?.(); forYou = null }
 
   input.addEventListener('input', () => {
     const q = input.value.trim()
@@ -57,9 +65,10 @@ export function renderSearch(container) {
 
     clearTimeout(debounceTimer)
     if (!q) {
-      results.innerHTML = emptyPrompt()
+      showForYou()
       return
     }
+    hideForYou()
     if (q.length < 3) return  // wait for at least 3 characters
 
     results.innerHTML = loadingHTML()
@@ -69,11 +78,11 @@ export function renderSearch(container) {
   clearBtn.addEventListener('click', () => {
     input.value = ''
     clearBtn.style.display = 'none'
-    results.innerHTML = emptyPrompt()
+    showForYou()
     input.focus()
   })
 
-  results.innerHTML = emptyPrompt()
+  showForYou()
 
   // Manual add
   container.querySelector('#manual-add-btn').addEventListener('click', () => {
@@ -87,8 +96,8 @@ export function renderSearch(container) {
     })
   })
 
-  // Focus input after mount
-  setTimeout(() => input.focus(), 150)
+  // Stop the For you feed's library listener when leaving the tab
+  return () => { hideForYou(); clearTimeout(debounceTimer) }
 }
 
 async function doSearch(query, resultsEl) {

@@ -52,7 +52,8 @@ function fingerprint(book) {
 
 // ── Individual API fetchers ───────────────────────────────────────────────────
 
-async function searchGoogle(query) {
+/** Google Books only (no Open Library merge) */
+export async function searchGoogle(query) {
   const key = BOOKS_API_KEY ? `&key=${BOOKS_API_KEY}` : ''
   const url = `${GOOGLE_BASE}?q=${encodeURIComponent(query)}&maxResults=20&printType=books${key}`
   const res = await fetch(url)
@@ -118,6 +119,14 @@ export const getBookById = async (volumeId) => {
 }
 
 /**
+ * Listings that aren't a normal edition of a book: summaries and study
+ * guides, box sets and collections, graphic-novel adaptations, samplers,
+ * and placeholder listings publishers create before a book has a title.
+ */
+export const isJunkTitle = title =>
+  /\b(summary|study guide|analysis|workbook|box\s?set|boxed\s+set|collection|books?\s+\d+\s*[-–]\s*\d+|\d+\s+books?\b|bundle|sampler|excerpt|graphic novel|untitled|unti|tbd|tba)\b|\bintl\/|\/e$/i.test(String(title))
+
+/**
  * Books by an author from Google Books, newest first. Google lists the same
  * book many times (editions, audiobooks, box sets) and mixes in summaries and
  * study guides, so results are filtered and de-duplicated by title.
@@ -140,7 +149,7 @@ export const searchByAuthor = async (author) => {
     .map(normalizeGoogleBook)
     .filter(b => b.author.toLowerCase().includes(wanted))
     .filter(b => !b.language || b.language === 'en') // skip translated editions
-    .filter(b => !/\b(summary|study guide|analysis|workbook|box\s?set|boxed\s+set|collection|books?\s+\d+\s*[-–]\s*\d+|bundle|sampler|excerpt)\b/i.test(b.title))
+    .filter(b => !isJunkTitle(b.title))
     .filter(b => {
       const k = titleKey(b.title)
       if (!k || seen.has(k)) return false

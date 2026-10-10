@@ -24,7 +24,7 @@ const firebaseConfig = {
   measurementId: 'G-3H37V2GZJX',
 }
 
-const app = initializeApp(firebaseConfig)
+export const app = initializeApp(firebaseConfig)
 
 export const auth = getAuth(app)
 // Keep a local copy of the library in IndexedDB: shelves render from it
