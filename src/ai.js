@@ -51,7 +51,7 @@ Only suggest real authors and real book titles.`
       const model = getGenerativeModel(ai, {
         model: name,
         generationConfig: { responseMimeType: 'application/json', responseSchema, temperature: 0.6 },
-      })
+      }, { timeout: 45000 }) // never leave the row spinning on a stalled request
       const result = await model.generateContent(prompt)
       const parsed = JSON.parse(result.response.text())
       return (parsed.suggestions || []).filter(s => s.author && s.books?.length)
