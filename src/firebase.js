@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app'
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import {
   getAuth,
   GoogleAuthProvider,
@@ -25,6 +26,17 @@ const firebaseConfig = {
 }
 
 export const app = initializeApp(firebaseConfig)
+
+// App Check proves requests come from this app (required for Firebase AI
+// Logic). reCAPTCHA Enterprise runs invisibly; the site key is public by design.
+const RECAPTCHA_ENTERPRISE_SITE_KEY = '6Ld2SuctAAAAADo_KmFUF3MXHH3k8DFNdECtTGnj'
+// Local dev server only: use an App Check debug token (printed in the browser
+// console once, then registered under App Check → Apps → Manage debug tokens)
+if (import.meta.env.DEV) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true
+export const appCheck = initializeAppCheck(app, {
+  provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_ENTERPRISE_SITE_KEY),
+  isTokenAutoRefreshEnabled: true,
+})
 
 export const auth = getAuth(app)
 // Keep a local copy of the library in IndexedDB: shelves render from it

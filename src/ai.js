@@ -3,8 +3,10 @@
 // isn't part of the startup bundle.
 import { app } from './firebase.js'
 
-// Newest Flash model first; fall back if the alias isn't available
-const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash']
+// Flash-Lite answers in ~1.5s with good picks; 3.8 Flash is a slower (~30s)
+// fallback. (gemini-flash-latest stalled on the free tier and 2.5 Flash is
+// retired for new projects — tested October 2026.)
+const MODELS = ['gemini-flash-lite-latest', 'gemini-3.8-flash']
 
 let modulePromise = null
 const loadAI = () => (modulePromise ??= import('firebase/ai'))
