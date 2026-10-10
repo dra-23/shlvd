@@ -155,6 +155,7 @@ async function finish(canvas) {
 /** Card for one Book of the Month pick and that month's reading */
 export async function drawBotmCard(book, monthBooks) {
   await ensureFonts()
+  const coverImg = await loadCover(drawableCoverUrl(book.thumbnail, 700, true))
   const canvas = document.createElement('canvas')
   canvas.width = W; canvas.height = H
   const ctx = canvas.getContext('2d')
@@ -173,7 +174,7 @@ export async function drawBotmCard(book, monthBooks) {
   ctx.font = font(800, 92)
   ctx.fillText(month, W / 2, 300)
 
-  typographicBook(ctx, book, (W - 600) / 2, 380, 600, 880)
+  heroCover(ctx, coverImg, book, 380, 880)
 
   ctx.textAlign = 'center'
   ctx.fillStyle = CREAM
@@ -340,6 +341,104 @@ export async function drawYearCard(year, s) {
   }
 
   wordmark(ctx, 1895)
+  return finish(canvas)
+}
+
+// Big centred cover at roughly its own shape, or the typographic stand-in
+function heroCover(ctx, img, book, y, h) {
+  const ratio = img ? Math.min(0.78, Math.max(0.6, img.width / img.height)) : 600 / 880
+  const w = Math.round(h * ratio)
+  drawCover(ctx, img, book, (W - w) / 2, y, w, h, 24)
+}
+
+const SHELF_KICKER = { read: 'FINISHED', reading: 'CURRENTLY READING', want: 'ON MY TBR', dnf: 'DID NOT FINISH' }
+
+/** Card for a single book: cover, rating, where it is on your shelves and your review */
+export async function drawBookCard(book) {
+  await ensureFonts()
+  const coverImg = await loadCover(drawableCoverUrl(book.thumbnail, 700, true))
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+  background(ctx)
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = GOLD
+  ctx.font = font(800, 40)
+  ctx.letterSpacing = '6px'
+  ctx.fillText(SHELF_KICKER[book.shelf] || 'ON MY RADAR', W / 2, 170)
+  ctx.letterSpacing = '0px'
+
+  // Cover and details as one block, centred in the space under the heading
+  const drawBody = ctx => {
+    heroCover(ctx, coverImg, book, 240, 960)
+
+    let y = 1310
+    ctx.textAlign = 'center'
+    ctx.fillStyle = CREAM
+    ctx.font = font(800, 58)
+    wrap(ctx, book.title, W - 180, 2).forEach(l => { ctx.fillText(l, W / 2, y); y += 68 })
+    ctx.fillStyle = 'rgba(246,248,242,0.8)'
+    ctx.font = font(700, 40)
+    ctx.fillText(wrap(ctx, book.author, W - 180, 1)[0] || '', W / 2, y + 4)
+    y += 4
+    if (book.rating) { stars(ctx, book.rating, W / 2, y + 86, 60); y += 86 }
+
+    // One line about where the book is: finished date, progress, or length and genre
+    const d = book.dateCompleted
+    let info = ''
+    if (book.shelf === 'read' && d) info = `Finished ${d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+    else if (book.shelf === 'reading' && book.pageCount) info = `Page ${book.progress || 0} of ${book.pageCount}`
+    else info = [book.pageCount ? `${book.pageCount} pages` : '', book.genre].filter(Boolean).join('  ·  ')
+
+    if (book.shelf === 'reading' && book.pageCount) {
+      const pct = Math.min(1, (book.progress || 0) / book.pageCount)
+      const bw = 560, bx = (W - bw) / 2, by = y + 60
+      ctx.fillStyle = 'rgba(255,255,255,0.18)'
+      roundRect(ctx, bx, by, bw, 18, 9); ctx.fill()
+      if (pct > 0) { ctx.fillStyle = GOLD; roundRect(ctx, bx, by, Math.max(18, bw * pct), 18, 9); ctx.fill() }
+      y += 60
+      info += `  ·  ${Math.round(pct * 100)}%`
+    }
+    if (info) {
+      ctx.fillStyle = 'rgba(246,248,242,0.75)'
+      ctx.font = font(700, 36)
+      ctx.textAlign = 'center'
+      ctx.fillText(info, W / 2, y + 74)
+      y += 74
+    }
+
+    const awards = [
+      book.isBOTY && `Book of the Year${book.botyYear ? ` ${book.botyYear}` : ''}`,
+      book.isBOTM && `Book of the Month${d ? ` · ${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}` : ''}`,
+    ].filter(Boolean)
+    if (awards.length) {
+      ctx.fillStyle = GOLD
+      ctx.font = font(800, 36)
+      ctx.fillText(`★ ${awards[0]}`, W / 2, y + 66)
+      y += 66
+    }
+
+    // A few words from the review, if there's room
+    const review = String(book.review || '').trim()
+    if (review && y < 1700) {
+      ctx.fillStyle = CREAM
+      ctx.font = `italic ${font(600, 36)}`
+      const lines = wrap(ctx, `“${review}”`, W - 200, Math.max(1, Math.floor((1810 - y - 40) / 48)))
+      let ly = y + 84
+      lines.forEach(l => { ctx.fillText(l, W / 2, ly); ly += 48 })
+      y = ly - 48
+    }
+    return y
+  }
+  const scratch = document.createElement('canvas').getContext('2d')
+  const shift = Math.max(0, (1800 - drawBody(scratch)) / 2)
+  ctx.save()
+  ctx.translate(0, shift)
+  drawBody(ctx)
+  ctx.restore()
+
+  wordmark(ctx, 1872)
   return finish(canvas)
 }
 

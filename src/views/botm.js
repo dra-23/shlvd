@@ -91,10 +91,10 @@ export function renderBotm(container) {
   const content = container.querySelector('#botm-content')
   let picks = null, allBooks = null
 
-  // List or cover wall, remembered on this device
   const VIEW_KEY = 'shlvd-botm-view'
-  let view = 'list'
-  try { view = localStorage.getItem(VIEW_KEY) === 'wall' ? 'wall' : 'list' } catch {}
+  // Cover wall unless you've switched to the list on this device
+  let view = 'wall'
+  try { view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'wall' } catch {}
   const toggle = container.querySelector('#botm-view-toggle')
   const syncToggle = () => {
     toggle.innerHTML = `<span class="material-symbols-rounded">${view === 'wall' ? 'view_agenda' : 'grid_view'}</span>`

@@ -33,6 +33,7 @@ async function populateGenreDatalist(sheet, book) {
   }
 }
 import { showSnackbar } from './shelves.js'
+import { drawBookCard, shareImage } from '../share.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
 
 const SHELF_LABELS = { want: 'TBR', reading: 'Reading', read: 'Read', dnf: 'DNF' }
@@ -276,6 +277,22 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
 
   scrim.addEventListener('click', () => closeSheet('manual'))
   sheet.querySelector('#close-btn')?.addEventListener('click', () => closeSheet('manual'))
+
+  // ── Share as image ────────────────────────────────────
+  sheet.querySelector('#bd-share')?.addEventListener('click', async e => {
+    const btn = e.currentTarget
+    btn.disabled = true
+    showSnackbar('Creating image…')
+    try {
+      const slug = String(book.title || 'book').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)
+      const result = await shareImage(await drawBookCard({ ...book, shelf: existingShelf || book.shelf }),
+        `shlvd-${slug || 'book'}.jpg`, `${book.title} by ${book.author}`)
+      if (result === 'downloaded') showSnackbar('Image saved')
+    } catch (err) {
+      console.error(err)
+      showSnackbar('Couldn’t create the image')
+    } finally { btn.disabled = false }
+  })
 
   // ── Author → author page ──────────────────────────────
   hydrateAuthorAvatars(sheet)
@@ -725,6 +742,9 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
     <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
     <button class="icon-btn bd-close" id="close-btn" aria-label="Close">
       <span class="material-symbols-rounded">close</span>
+    </button>
+    <button class="icon-btn bd-close bd-share" id="bd-share" aria-label="Share as image">
+      <span class="material-symbols-rounded">share</span>
     </button>
 
     <header class="bd-hero">
