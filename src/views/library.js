@@ -6,6 +6,7 @@ import { avatarButtonHTML, wireTopBar } from './topbar.js'
 import { openSheet } from './sheet.js'
 import { bookCardHTML, coverImgHTML, groupSeries, SHELF_BADGE } from './shelves.js'
 import { openManageGenres } from './manage-genres.js'
+import { missingCoverAttrs } from '../cover-fix.js'
 
 // Library tab ("Shlvd"): every book, with shelf chips, sort, filters and a
 // grid/list toggle, plus a Series view. The last view is remembered per device.
@@ -392,7 +393,7 @@ function seriesCoverHTML(book, extraClass = '') {
     <div class="sc-cover ${extraClass} ${book.shelf === 'read' ? '' : 'sc-cover--unread'}">
       ${book.thumbnail
         ? `<img src="${esc(book.thumbnail)}" alt="" loading="lazy" />`
-        : `<span class="material-symbols-rounded">menu_book</span>`}
+        : `<span class="material-symbols-rounded" ${missingCoverAttrs(book)}>menu_book</span>`}
     </div>`
 }
 

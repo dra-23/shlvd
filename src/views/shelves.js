@@ -7,6 +7,7 @@ import { openSheet } from './sheet.js'
 import { openLibrary } from './library.js'
 import { authorLinksHTML, hydrateAuthorAvatars } from '../authors.js'
 import { openAuthorPage } from './author.js'
+import { missingCoverAttrs } from '../cover-fix.js'
 
 // Home tab: what you're reading now and what's next. The full collection
 // lives in the library tab (library.js).
@@ -281,7 +282,7 @@ export function coverImgHTML(book) {
   return book.thumbnail
     ? `<img src="${esc(book.thumbnail)}" alt="${esc(book.title)}" loading="lazy"
          data-book-id="${esc(book.id)}" data-title="${esc(book.title)}" data-author="${esc(book.author)}" />`
-    : `<div class="book-cover-placeholder">
+    : `<div class="book-cover-placeholder" ${book.id ? missingCoverAttrs(book) : ''}>
          <span class="material-symbols-rounded">menu_book</span>
          <div class="placeholder-title">${esc(book.title)}</div>
        </div>`

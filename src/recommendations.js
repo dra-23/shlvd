@@ -64,7 +64,7 @@ function filterNew(list, books) {
   const seen = new Set()
   return list.filter(b => {
     const k = titleKey(b.title)
-    if (!k || owned.has(k) || dismissed.has(k) || seen.has(k) || isJunkTitle(b.title)) return false
+    if (!k || owned.has(k) || dismissed.has(k) || seen.has(k) || isJunkTitle(b.title) || !b.thumbnail) return false
     seen.add(k)
     return true
   })

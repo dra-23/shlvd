@@ -168,6 +168,8 @@ export const searchByAuthor = async (author) => {
 /** Title without subtitle/series suffix, for matching editions of the same book */
 export const titleKey = title => String(title)
   .toLowerCase()
+  // "The Fourth Monkey Free Sample" → "The Fourth Monkey" (only after a title, so "Sample Size" survives)
+  .replace(/(\S)\s+(free\s+)?(sample|preview|excerpt)\b.*$/, '$1')
   .replace(/\s*[:(\[].*$/, '')
   .replace(/^(the|a|an)\s+/, '')
   .replace(/[^a-z0-9]/g, '')

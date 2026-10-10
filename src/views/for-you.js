@@ -10,6 +10,7 @@ import {
 import { openBookDetail } from './book-detail.js'
 import { openAuthorPage } from './author.js'
 import { showSnackbar } from './shelves.js'
+import { missingCoverAttrs } from '../cover-fix.js'
 
 // "For you" feed shown on the Search tab while the search box is empty.
 // Rows fill in as their data arrives; network results are cached for a day.
@@ -81,7 +82,7 @@ export function mountForYou(el) {
       <div class="fy-card" style="--i:${i % 6}">
         <button class="fy-cover" data-open="${sectionId}:${i}" aria-label="${esc(b.title)}">
           ${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="" loading="lazy" />`
-            : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`}
+            : `<div class="book-cover-placeholder" style="width:100%;height:100%;" ${owned ? missingCoverAttrs(owned) : ''}><span class="material-symbols-rounded">menu_book</span></div>`}
         </button>
         ${owned ? '' : `<button class="fy-dismiss" data-dismiss="${sectionId}:${i}" aria-label="Not interested">
           <span class="material-symbols-rounded">close</span></button>`}
