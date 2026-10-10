@@ -3807,3 +3807,8 @@ html, body {
 .fy-author-books { display: flex; gap: 12px; }
 .fy-author-books .fy-card { flex-basis: 118px; }
 .fy-author-books .fy-cover { width: 118px; }
+
+/* Snapping lines cards up with the scroller edge unless told about the side padding —
+   without this the first card sits flush against the screen edge */
+.fy-row { scroll-padding-inline: 16px; }
+.botm-also-strip { scroll-padding-inline: 0 16px; }
