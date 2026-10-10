@@ -5,6 +5,8 @@ import { openBookDetail } from './book-detail.js'
 import { showSnackbar } from './shelves.js'
 import { drawBotmCard, shareImage } from '../share.js'
 import { avatarButtonHTML, wireTopBar } from './topbar.js'
+import { authorLinksHTML, hydrateAuthorAvatars } from '../authors.js'
+import { openAuthorPage } from './author.js'
 import { loadChart } from '../charts.js'
 import { chartColors } from '../theme.js'
 
@@ -473,6 +475,9 @@ function openBotmPage(index, viewEl) {
     }
 
     page.querySelector('.botm-back-btn').addEventListener('click', () => closePage('manual'))
+    hydrateAuthorAvatars(page)
+    page.querySelectorAll('.author-link').forEach(link =>
+      link.addEventListener('click', () => openAuthorPage(link.dataset.author)))
     page.querySelector('.botm-older-btn')?.addEventListener('click', () => step('older'))
     page.querySelector('.botm-share-btn').addEventListener('click', async e => {
       const btn = e.currentTarget
@@ -671,7 +676,7 @@ function buildPageHTML(book, monthBooks, index) {
         <div class="bd-cover">${coverHTML}</div>
         <div class="bd-hero-text">
           <h2 class="bd-title">${esc(book.title)}</h2>
-          <div class="bd-author">${esc(book.author)}</div>
+          <div class="bd-author bd-authors">${authorLinksHTML(book.author)}</div>
           ${book.rating ? `<div class="botm-page-stars">${starHTML(book.rating)}</div>` : ''}
           ${facts ? `<div class="bd-facts">${facts}</div>` : ''}
           ${pills ? `<div class="bd-pills">${pills}</div>` : ''}

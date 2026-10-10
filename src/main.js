@@ -90,6 +90,9 @@ function _navigateInternal(tab) {
     activeViewDestroy()
     activeViewDestroy = null
   }
+  // Pages inside the old view (BotM month, author) go with it — drop their
+  // back handlers so the next Back press isn't swallowed by a stale one
+  backHandlerStack.length = 0
 
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab)

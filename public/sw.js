@@ -1,4 +1,4 @@
-const CACHE = 'shlvd-v4'
+const CACHE = 'shlvd-v5'
 
 // Google Fonts responses are opaque (no-cors) but safe to cache — without
 // them the icons render as plain words when offline
@@ -26,7 +26,12 @@ self.addEventListener('fetch', e => {
     url.includes('firestore.googleapis.com') ||
     url.includes('identitytoolkit') ||
     url.includes('googleapis.com/books') ||
-    url.includes('books.google.com')
+    url.includes('books.google.com') ||
+    // Author bios: the app keeps its own 30-day cache, so don't freeze them here
+    url.includes('wikipedia.org/api/') ||
+    url.includes('wikipedia.org/w/api.php') ||
+    url.includes('openlibrary.org/search/') ||
+    url.includes('openlibrary.org/authors/')
   ) return
 
   // Network-first for HTML so updates are always picked up

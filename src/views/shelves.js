@@ -5,6 +5,8 @@ import { navigateTo } from '../main.js'
 import { avatarButtonHTML, wireTopBar } from './topbar.js'
 import { openSheet } from './sheet.js'
 import { openLibrary } from './library.js'
+import { authorLinksHTML, hydrateAuthorAvatars } from '../authors.js'
+import { openAuthorPage } from './author.js'
 
 // Home tab: what you're reading now and what's next. The full collection
 // lives in the library tab (library.js).
@@ -80,6 +82,8 @@ export function renderShelves(container) {
 
   // One delegated handler for every book on the page
   container.querySelector('#shelves-content').addEventListener('click', e => {
+    const author = e.target.closest('.author-link')
+    if (author) return openAuthorPage(author.dataset.author)
     const update = e.target.closest('[data-update-progress]')
     if (update) return openProgressSheet(books.find(b => b.id === update.dataset.updateProgress))
     const seeAll = e.target.closest('[data-see-all]')
@@ -149,7 +153,7 @@ function readingCardHTML(book) {
       <div class="home-reading-cover">${coverImgHTML(book)}</div>
       <div class="home-reading-info">
         <div class="home-reading-title">${esc(book.title)}</div>
-        <div class="home-reading-author">${esc(book.author)}</div>
+        <div class="home-reading-author bd-authors">${authorLinksHTML(book.author, { photos: false })}</div>
         ${book.pageCount ? `
           <div class="bd-progress-bar"><div class="bd-progress-fill" style="width:${pct}%"></div></div>
           <div class="home-reading-pages">p. ${book.progress || 0} of ${book.pageCount} · ${pct}%</div>` : ''}

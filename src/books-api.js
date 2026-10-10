@@ -21,6 +21,7 @@ function normalizeGoogleBook(item) {
     description: info.description || '',
     publishedDate: info.publishedDate || '',
     categories: info.categories || [],
+    language: info.language || '',
   }
 }
 
@@ -115,3 +116,49 @@ export const getBookById = async (volumeId) => {
   const data = await res.json()
   return normalizeGoogleBook(data)
 }
+
+/**
+ * Books by an author from Google Books, newest first. Google lists the same
+ * book many times (editions, audiobooks, box sets) and mixes in summaries and
+ * study guides, so results are filtered and de-duplicated by title.
+ */
+export const searchByAuthor = async (author) => {
+  const key = BOOKS_API_KEY ? `&key=${BOOKS_API_KEY}` : ''
+  const fetchItems = async (q) => {
+    const res = await fetch(`${GOOGLE_BASE}?q=${encodeURIComponent(q)}&maxResults=40&printType=books${key}`)
+    if (!res.ok) {
+      const err = new Error('Books API error')
+      err.status = res.status
+      throw err
+    }
+    return (await res.json()).items || []
+  }
+
+  const wanted = author.toLowerCase()
+  const seen = new Set()
+  const tidy = items => items
+    .map(normalizeGoogleBook)
+    .filter(b => b.author.toLowerCase().includes(wanted))
+    .filter(b => !b.language || b.language === 'en') // skip translated editions
+    .filter(b => !/\b(summary|study guide|analysis|workbook|box\s?set|boxed\s+set|collection|books?\s+\d+\s*[-–]\s*\d+|bundle|sampler|excerpt)\b/i.test(b.title))
+    .filter(b => {
+      const k = titleKey(b.title)
+      if (!k || seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+
+  // Google's author search is inconsistent (quoted names and orderBy=newest
+  // return almost nothing; "inauthor:Riley Sager" returns nothing at all), so
+  // fall back to a plain name search — tidy() keeps only this author's books
+  let books = tidy(await fetchItems(`inauthor:${author}`))
+  if (books.length < 5) books = books.concat(tidy(await fetchItems(author)))
+  return books.sort((x, y) => (y.publishedDate || '').localeCompare(x.publishedDate || ''))
+}
+
+/** Title without subtitle/series suffix, for matching editions of the same book */
+export const titleKey = title => String(title)
+  .toLowerCase()
+  .replace(/\s*[:(\[].*$/, '')
+  .replace(/^(the|a|an)\s+/, '')
+  .replace(/[^a-z0-9]/g, '')

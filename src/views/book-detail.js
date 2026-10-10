@@ -1,6 +1,8 @@
 import { esc, safeHTML } from '../escape.js'
 import { addBook, updateBook, removeBook, restoreBook, setBOTY, getSeriesList, getGenreList } from '../db.js'
 import { matchGenre } from '../genres.js'
+import { authorLinksHTML, hydrateAuthorAvatars } from '../authors.js'
+import { openAuthorPage } from './author.js'
 
 // Cached series list for autocomplete — invalidated on every save
 let _seriesCache = null
@@ -274,6 +276,14 @@ export function openBookDetail(book, existingShelf, onDone, extraHTML = '', onMo
 
   scrim.addEventListener('click', () => closeSheet('manual'))
   sheet.querySelector('#close-btn')?.addEventListener('click', () => closeSheet('manual'))
+
+  // ── Author → author page ──────────────────────────────
+  hydrateAuthorAvatars(sheet)
+  sheet.querySelectorAll('.author-link').forEach(link => link.addEventListener('click', () => {
+    closeSheet('manual')
+    // let the sheet's history entry unwind before the page pushes its own
+    setTimeout(() => openAuthorPage(link.dataset.author), 320)
+  }))
 
   // ── Swipe down to dismiss ─────────────────────────────
   let dragStartY = 0
@@ -721,7 +731,7 @@ function buildSheetHTML(book, existingShelf, extraHTML = '') {
       <div class="bd-cover">${coverHTML}</div>
       <div class="bd-hero-text">
         <h2 class="bd-title">${esc(book.title)}</h2>
-        <div class="bd-author">${esc(book.author)}</div>
+        <div class="bd-author bd-authors">${authorLinksHTML(book.author)}</div>
         ${facts ? `<div class="bd-facts">${facts}</div>` : ''}
         ${statusPills ? `<div class="bd-pills">${statusPills}</div>` : ''}
       </div>

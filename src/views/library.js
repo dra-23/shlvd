@@ -398,7 +398,7 @@ function seriesCoverHTML(book, extraClass = '') {
 
 // Collapsed: overlapping covers in series order plus progress and what's next.
 // Expanded: totals, when you read it, and every book with its status.
-function seriesCardHTML(s, isOpen = false) {
+export function seriesCardHTML(s, isOpen = false) {
   const pct = s.total ? Math.round(s.read / s.total * 100) : 0
   const complete = s.read === s.total
   const authors = [...new Set(s.books.map(b => b.author).filter(Boolean))]

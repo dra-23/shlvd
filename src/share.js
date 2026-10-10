@@ -271,6 +271,128 @@ export async function drawYearCard(year, s) {
   return finish(canvas)
 }
 
+// Wikipedia images allow cross-origin use, so an author photo can usually be
+// drawn; resolves null (→ initials) if it can't
+function loadDrawableImage(src) {
+  if (!src) return Promise.resolve(null)
+  return new Promise(resolve => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const probe = document.createElement('canvas').getContext('2d')
+        probe.drawImage(img, 0, 0, 1, 1)
+        probe.getImageData(0, 0, 1, 1)
+        resolve(img)
+      } catch { resolve(null) }
+    }
+    img.onerror = () => resolve(null)
+    img.src = src
+  })
+}
+
+/** Card for an author: photo, your stats for them and your favourite of theirs */
+export async function drawAuthorCard(name, info, books) {
+  await ensureFonts()
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+  background(ctx)
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = GOLD
+  ctx.font = font(800, 40)
+  ctx.letterSpacing = '6px'
+  ctx.fillText('AUTHOR SPOTLIGHT', W / 2, 190)
+  ctx.letterSpacing = '0px'
+
+  // Round photo (or initials)
+  const cx = W / 2, cy = 470, r = 210
+  const photo = await loadDrawableImage(info?.image)
+  ctx.save()
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'
+  ctx.shadowBlur = 40
+  ctx.shadowOffsetY = 16
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = '#7d9070'; ctx.fill()
+  ctx.restore()
+  ctx.save()
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip()
+  if (photo) {
+    // cover-fit, biased upwards so faces aren't cropped off
+    const s = Math.max((2 * r) / photo.width, (2 * r) / photo.height)
+    const w = photo.width * s, h = photo.height * s
+    ctx.drawImage(photo, cx - w / 2, cy - r - Math.max(0, (h - 2 * r) * 0.2), w, h)
+  } else {
+    ctx.fillStyle = CREAM
+    ctx.font = font(800, 150)
+    ctx.textBaseline = 'middle'
+    ctx.fillText(name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase(), cx, cy + 6)
+    ctx.textBaseline = 'alphabetic'
+  }
+  ctx.restore()
+  ctx.strokeStyle = 'rgba(246,248,242,0.85)'
+  ctx.lineWidth = 10
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke()
+
+  ctx.fillStyle = CREAM
+  ctx.font = font(800, 84)
+  let y = 800
+  wrap(ctx, name, W - 160, 2).forEach(l => { ctx.fillText(l, W / 2, y); y += 92 })
+  if (info?.description) {
+    ctx.fillStyle = 'rgba(246,248,242,0.75)'
+    ctx.font = font(700, 38)
+    ctx.fillText(wrap(ctx, info.description, W - 200, 1)[0], W / 2, y + 4)
+  }
+
+  const read = books.filter(b => b.shelf === 'read')
+  const pages = read.reduce((n, b) => n + (b.pageCount || 0), 0)
+  const rated = read.filter(b => b.rating > 0)
+  const avg = rated.length ? (rated.reduce((n, b) => n + b.rating, 0) / rated.length).toFixed(1) : '—'
+  statsRow(ctx, [[String(read.length), `book${read.length === 1 ? '' : 's'} read`], [short(pages), 'pages'], [`${avg}★`, 'avg rating']], 1110)
+
+  // Awards line, only when there's something to brag about
+  const botm = books.filter(b => b.isBOTM).length
+  const boty = books.filter(b => b.isBOTY).length
+  const awards = [
+    botm && `${botm} Book${botm === 1 ? '' : 's'} of the Month`,
+    boty && `${boty} Book${boty === 1 ? '' : 's'} of the Year`,
+  ].filter(Boolean)
+  if (awards.length) {
+    ctx.textAlign = 'center'
+    ctx.fillStyle = GOLD
+    ctx.font = font(800, 40)
+    ctx.fillText(`★ ${awards.join('  ·  ')}`, W / 2, 1245)
+  }
+
+  const fav = [...rated].sort((a, b) => b.rating - a.rating || b.dateCompleted - a.dateCompleted)[0]
+  if (fav) {
+    const px = 90, py = awards.length ? 1300 : 1230, pw = W - 180, ph = awards.length ? 460 : 500
+    ctx.fillStyle = 'rgba(255,255,255,0.1)'
+    roundRect(ctx, px, py, pw, ph, 36)
+    ctx.fill()
+    const bookW = 280
+    typographicBook(ctx, fav, px + 50, py + (ph - bookW * 1.47) / 2, bookW, bookW * 1.47)
+    const tx = px + 50 + bookW + 50, tw = pw - bookW - 150
+    ctx.textAlign = 'left'
+    ctx.fillStyle = GOLD
+    ctx.font = font(800, 32)
+    ctx.letterSpacing = '4px'
+    ctx.fillText('MY FAVOURITE', tx, py + ph / 2 - 80)
+    ctx.letterSpacing = '0px'
+    ctx.fillStyle = CREAM
+    ctx.font = font(800, 50)
+    let ly = py + ph / 2 - 10
+    wrap(ctx, fav.title, tw, 3).forEach(l => { ctx.fillText(l, tx, ly); ly += 60 })
+    ctx.textAlign = 'left'
+    ctx.font = font(800, 44)
+    ctx.fillStyle = GOLD
+    ctx.fillText('★'.repeat(fav.rating), tx, ly + 14)
+  }
+
+  wordmark(ctx, 1840)
+  return finish(canvas)
+}
+
 /** Share an image through the phone's share sheet, or download it */
 export async function shareImage(blob, filename, title) {
   const file = new File([blob], filename, { type: blob.type })
