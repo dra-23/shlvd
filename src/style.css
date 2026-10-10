@@ -3716,7 +3716,6 @@ html, body {
 .pf-avatar--lg { width: 56px; height: 56px; }
 .pf-id { flex: 1; min-width: 0; line-height: 1.2; color: var(--md-on-primary-container); }
 .pf-name { font-weight: 800; font-size: 1rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.pf-summary { font-size: 0.75rem; font-weight: 600; opacity: 0.8; }
 
 /* Year chips: one row, sticky so the filter is always in reach */
 .pf-years {

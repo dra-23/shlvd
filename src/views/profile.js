@@ -84,7 +84,6 @@ export function renderProfile(container) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   function renderAll() {
-    renderSummary()
     renderYears()
     renderYir()
     $('#goal-card').hidden = year !== thisYear
@@ -98,13 +97,6 @@ export function renderProfile(container) {
     if (!container.querySelector('.pf-sections.shown')) {
       requestAnimationFrame(() => $('.pf-sections')?.classList.add('shown'))
     }
-  }
-
-  function renderSummary() {
-    const first = read.length ? Math.min(...read.map(b => b.dateCompleted.getFullYear())) : null
-    $('#pf-summary').textContent = read.length
-      ? `${plural(read.length, 'book')} read since ${first}`
-      : 'Your reading stats live here'
   }
 
   function renderYears() { $('#pf-years').innerHTML = yearChipsHTML(read, year) }
@@ -538,7 +530,6 @@ function buildHTML(user) {
         <div class="pf-avatar">${avatar}</div>
         <div class="pf-id">
           <div class="pf-name">${esc(user?.displayName || 'Reader')}</div>
-          <div class="pf-summary" id="pf-summary"></div>
         </div>
         <button class="icon-btn" id="profile-settings" aria-label="Settings">
           <span class="material-symbols-rounded">settings</span>
