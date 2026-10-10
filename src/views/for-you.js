@@ -30,17 +30,44 @@ export function mountForYou(el) {
   const errors = {}
   const items = {} // section id → the items currently rendered, for click handlers
 
+  // Loading placeholders: shimmering cards whose shimmer ripples along the row
+  const skeletonCards = n => Array.from({ length: n }, (_, i) => `
+    <div class="fy-card fy-skel" style="--i:${i}" aria-hidden="true">
+      <div class="fy-skel-cover skeleton"></div>
+      <div class="fy-skel-line skeleton"></div>
+      <div class="fy-skel-line fy-skel-line--short skeleton"></div>
+      <div class="fy-skel-pill skeleton"></div>
+    </div>`).join('')
+  const skeletonAuthors = n => Array.from({ length: n }, (_, i) => `
+    <div class="fy-author-card fy-skel" style="--i:${i}" aria-hidden="true">
+      <div class="fy-skel-author">
+        <div class="fy-skel-avatar skeleton"></div>
+        <div style="flex:1">
+          <div class="fy-skel-line skeleton" style="width:60%"></div>
+          <div class="fy-skel-line fy-skel-line--short skeleton" style="width:85%"></div>
+        </div>
+      </div>
+      <div class="fy-author-books">${skeletonCards(2)}</div>
+    </div>`).join('')
+
   el.innerHTML = `
-    <div class="fy">
+    <div class="fy" aria-busy="true">
       ${SECTIONS.map(s => `
         <section class="fy-section" id="fy-${s.id}">
           <div class="fy-head">
             <h2><span class="material-symbols-rounded">${s.icon}</span>${s.title}</h2>
-            ${s.note ? `<span class="fy-note">${s.note}</span>` : ''}
+            ${s.id === 'similar'
+              ? `<span class="fy-note fy-thinking"><span class="material-symbols-rounded">auto_awesome</span>Thinking…</span>`
+              : s.note ? `<span class="fy-note">${s.note}</span>` : ''}
           </div>
-          <div class="fy-row">${'<div class="fy-card"><div class="fy-cover skeleton"></div></div>'.repeat(3)}</div>
+          <div class="fy-row">${s.id === 'similar' ? skeletonAuthors(2) : skeletonCards(4)}</div>
         </section>`).join('')}
     </div>`
+
+  // Covers fade in as their images arrive instead of popping in
+  el.addEventListener('load', e => {
+    if (e.target.tagName === 'IMG') e.target.classList.add('loaded')
+  }, true)
 
   function cardHTML(sectionId, item, i) {
     const b = item.book
@@ -51,7 +78,7 @@ export function mountForYou(el) {
         ? `<button class="fy-action" data-start="${sectionId}:${i}"><span class="material-symbols-rounded">play_arrow</span>Start</button>`
         : `<span class="fy-action done">${owned.shelf === 'reading' ? 'Reading' : 'On a shelf'}</span>`
     return `
-      <div class="fy-card">
+      <div class="fy-card" style="--i:${i % 6}">
         <button class="fy-cover" data-open="${sectionId}:${i}" aria-label="${esc(b.title)}">
           ${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="" loading="lazy" />`
             : `<div class="book-cover-placeholder" style="width:100%;height:100%;"><span class="material-symbols-rounded">menu_book</span></div>`}
@@ -65,23 +92,48 @@ export function mountForYou(el) {
       </div>`
   }
 
+  // Rows animate in the first time they fill; later re-renders (dismissals,
+  // library changes) swap content without replaying the entrance
+  const entered = new Set()
+  const enter = (id, row) => {
+    row.classList.toggle('fy-enter', !entered.has(id))
+    entered.add(id)
+    if (SECTIONS.every(sec => entered.has(sec.id) || el.querySelector(`#fy-${sec.id}`)?.hidden)) {
+      el.querySelector('.fy')?.setAttribute('aria-busy', 'false')
+    }
+  }
+
+  // Only touch the DOM when a row's content actually changed — rebuilding
+  // identical rows would recreate every cover and replay its fade-in (flicker)
+  const setRow = (row, html) => {
+    if (row._html === html) return false
+    row._html = html
+    row.innerHTML = html
+    return true
+  }
+
   function fillRow(id, list, emptyText) {
     const section = el.querySelector(`#fy-${id}`)
     if (!section) return
     items[id] = list
     if (!list.length) {
-      if (emptyText) section.querySelector('.fy-row').innerHTML = `<div class="home-empty fy-empty">${emptyText}</div>`
+      if (emptyText) setRow(section.querySelector('.fy-row'), `<div class="home-empty fy-empty">${emptyText}</div>`)
       else section.hidden = true
       return
     }
     section.hidden = false
-    section.querySelector('.fy-row').innerHTML = list.map((item, i) => cardHTML(id, item, i)).join('')
+    const row = section.querySelector('.fy-row')
+    if (setRow(row, list.map((item, i) => cardHTML(id, item, i)).join(''))) enter(id, row)
   }
 
   function fillSimilar() {
     const section = el.querySelector('#fy-similar')
+    if (fetched.similar || errors.similar) {
+      const note = section.querySelector('.fy-thinking')
+      if (note) { note.classList.remove('fy-thinking'); note.textContent = 'Gemini' }
+    }
     if (errors.similar) {
-      section.querySelector('.fy-row').innerHTML = `<div class="home-empty fy-empty">Suggestions aren’t available right now.</div>`
+      setRow(section.querySelector('.fy-row'), `<div class="home-empty fy-empty">Suggestions aren’t available right now.</div>`)
       return
     }
     if (!fetched.similar) return
@@ -90,8 +142,9 @@ export function mountForYou(el) {
       .filter(s => s.books.length)
     if (!similar.length) { section.hidden = true; return }
     const flat = []
-    section.querySelector('.fy-row').innerHTML = similar.map(s => `
-      <div class="fy-author-card">
+    const row = section.querySelector('.fy-row')
+    const changed = setRow(row, similar.map((s, n) => `
+      <div class="fy-author-card" style="--i:${n}">
         <button class="fy-author-head" data-author="${esc(s.author)}">
           ${authorAvatarHTML(s.author, 'fy-avatar')}
           <span class="fy-author-text">
@@ -103,9 +156,9 @@ export function mountForYou(el) {
         <div class="fy-author-books">
           ${s.books.map(b => { flat.push({ book: b }); return cardHTML('similar', { book: b }, flat.length - 1) }).join('')}
         </div>
-      </div>`).join('')
+      </div>`).join(''))
     items.similar = flat
-    hydrateAuthorAvatars(section)
+    if (changed) { enter('similar', row); hydrateAuthorAvatars(section) }
   }
 
   // Rows from the network were filtered when they arrived — drop anything

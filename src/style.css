@@ -3815,3 +3815,65 @@ html, body {
    without this the first card sits flush against the screen edge */
 .fy-row { scroll-padding-inline: 16px; }
 .botm-also-strip { scroll-padding-inline: 0 16px; }
+
+/* ── For you: loading + arrival animation ── */
+/* Placeholder cards; the shimmer ripples along the row via --i */
+.fy-skel { pointer-events: none; }
+.fy-skel .skeleton { animation-delay: calc(var(--i, 0) * 120ms); }
+.fy-skel-cover { width: 116px; aspect-ratio: 2 / 3; border-radius: var(--md-shape-md); }
+.fy-author-books .fy-skel-cover { width: 118px; }
+.fy-skel-line { height: 11px; width: 90%; margin-top: 8px; border-radius: 6px; }
+.fy-skel-line--short { width: 60%; margin-top: 6px; }
+.fy-skel-pill { height: 28px; width: 100%; margin-top: 10px; border-radius: var(--md-shape-full); }
+.fy-skel-author { display: flex; align-items: center; gap: 10px; }
+.fy-skel-avatar { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; }
+.fy-author-card.fy-skel { min-height: 0; }
+
+/* A brighter shimmer than the default so it reads on the feed background */
+.fy .skeleton {
+  background: linear-gradient(90deg,
+    var(--md-surface-container-high) 20%,
+    var(--md-surface-container-lowest) 50%,
+    var(--md-surface-container-high) 80%);
+  background-size: 200% 100%;
+}
+:root[data-theme="dark"] .fy .skeleton {
+  background: linear-gradient(90deg,
+    var(--md-surface-container) 20%,
+    var(--md-surface-container-highest) 50%,
+    var(--md-surface-container) 80%);
+  background-size: 200% 100%;
+}
+
+/* "Thinking…" while Gemini works */
+.fy-thinking { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-text); }
+.fy-thinking .material-symbols-rounded {
+  font-size: 16px;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  animation: fyPulse 1.2s ease-in-out infinite;
+}
+@keyframes fyPulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85) rotate(0deg); }
+  50%      { opacity: 1;    transform: scale(1.1) rotate(15deg); }
+}
+
+/* Real cards slide in one after another the first time a row fills */
+.fy-enter > .fy-card,
+.fy-enter > .fy-author-card {
+  animation: fyIn 380ms var(--md-motion-decelerate) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+@keyframes fyIn {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Covers fade in once the image has actually loaded */
+.fy-cover img { opacity: 0; transition: opacity 300ms ease; }
+.fy-cover img.loaded { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fy .skeleton, .fy-thinking .material-symbols-rounded,
+  .fy-enter > .fy-card, .fy-enter > .fy-author-card { animation: none; }
+  .fy-cover img { transition: none; }
+}
