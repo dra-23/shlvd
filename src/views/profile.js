@@ -1,98 +1,627 @@
 import { esc } from '../escape.js'
-import { auth, signOutUser } from '../firebase.js'
-import { watchAllBooks, getBook, updateBook } from '../db.js'
+import { auth } from '../firebase.js'
+import { watchAllBooks, updateBook } from '../db.js'
 import { openBookDetail } from './book-detail.js'
-import { showSnackbar } from './shelves.js'
+import { showSnackbar, coverImgHTML } from './shelves.js'
 import { mountReadingGoal } from './reading-goal.js'
 import { drawYearCard, shareImage } from '../share.js'
-import { openManageGenres } from './manage-genres.js'
 import { suggestTitleFix, getConfirmedTitleIds, confirmTitle } from '../title-check.js'
 import { backHandlerStack, popOwnHistoryEntry } from '../main.js'
-import { loadChart } from '../charts.js'
-import { chartColors, getThemePref, setThemePref } from '../theme.js'
+import { splitAuthors, authorAvatarHTML, hydrateAuthorAvatars } from '../authors.js'
+import { openAuthorPage } from './author.js'
+import { openLibrary } from './library.js'
+import { openSheet } from './sheet.js'
+import { openSettingsPage } from './settings.js'
 
-// Set by buildCharts once Chart.js has loaded (see charts.js)
-let Chart = null
+// Profile: your reading stats for one year (or all time). The year chips at
+// the top filter every section below them. Charts are plain HTML/SVG styled
+// from CSS variables, so they follow light/dark mode without redrawing.
 
-const C = {
-  primary:   '#98ab88',
-  primary2:  '#b5c4a8',
-  primary3:  '#7d9070',
-  secondary: '#afc49d',
-  tertiary:  '#d8ada8',
-  tertiary2: '#c49490',
-  tertiary3: '#e8c5c0',
-  grid:      '#e4e9e0',
-  text:      '#44483d',
+const DAY = 86400000
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const GENRE_SLOTS = 5
+
+const short = n => n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+const dayKey = d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+const avgRating = list => {
+  const rated = list.filter(b => b.rating > 0)
+  return rated.length ? rated.reduce((s, b) => s + b.rating, 0) / rated.length : null
 }
+const sumPages = list => list.reduce((s, b) => s + (b.pageCount > 0 ? b.pageCount : 0), 0)
 
-// 1★→5★: pale rose → warm sand → deep sage (clearly distinct)
-const RATING_PALETTE = ['#e8c5c0', '#d8ada8', '#c9b99a', '#afc49d', '#7d9070']
+// Weeks since a fixed Sunday, so consecutive weeks differ by exactly 1
+const weekIndex = d => Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1970, 0, 4)) / (7 * DAY))
 
-// Alternates green/rose families at different lightness so every
-// adjacent slice contrasts regardless of how many genres there are
-const DOUGHNUT_PALETTE = [
-  '#7d9070', '#c49490', '#98ab88', '#d8ada8',
-  '#afc49d', '#e8c5c0', '#b5c4a8', '#c9b99a',
-]
-
-let charts = {}
-let calState   = { year: 0, month: 0 }
-let calendarBooks = []
-
-function killCharts() {
-  Object.values(charts).forEach(c => c?.destroy())
-  charts = {}
+function longestWeekStreak(list) {
+  const weeks = [...new Set(list.map(b => weekIndex(b.dateCompleted)))].sort((a, b) => a - b)
+  let best = 0, run = 0
+  weeks.forEach((w, i) => { run = i && w === weeks[i - 1] + 1 ? run + 1 : 1; best = Math.max(best, run) })
+  return best
 }
 
 export function renderProfile(container) {
   const now = new Date()
-  calState = { year: now.getFullYear(), month: now.getMonth() }
-  calendarBooks = []
-
+  const thisYear = now.getFullYear()
   const user = auth.currentUser
+
+  let books = []        // every book
+  let read = []         // finished books with a completion date
+  let year = thisYear   // or 'all'
+  let cal = { y: thisYear, m: now.getMonth() }
+  let genreColour = new Map() // genre → palette slot, by all-time rank so colours stay put
+
   container.innerHTML = buildHTML(user)
+  const $ = sel => container.querySelector(sel)
+  const scroller = $('.profile-scroll')
 
-  container.querySelector('#sign-out-btn').addEventListener('click', () => signOutUser())
-  // Profile is opened from the avatar, so Back returns to whichever tab you came from
-  container.querySelector('#profile-back').addEventListener('click', () => history.back())
-  container.querySelector('#manage-genres-btn').addEventListener('click', () => openManageGenres())
-  initCalendar(container)
+  $('#profile-back').addEventListener('click', () => history.back())
+  $('#profile-settings').addEventListener('click', () => openSettingsPage())
+  $('#year-review-btn').addEventListener('click', () => openYearInReview(books, year === 'all' ? thisYear : year))
 
-  let allBooks = []
-  container.querySelector('#year-review-btn').addEventListener('click', () => {
-    openYearInReview(allBooks)
+  const goal = mountReadingGoal($('#goal-card'))
+
+  const unsub = watchAllBooks(all => {
+    books = all
+    read = all.filter(b => b.shelf === 'read' && b.dateCompleted)
+    goal.update(all)
+    rankGenres()
+    renderAll()
+    renderFixTitles(container, all)
   })
-
-  const goal = mountReadingGoal(container.querySelector('#goal-card'))
-
-  const unsub = watchAllBooks(books => {
-    allBooks = books
-    goal.update(books)
-    calendarBooks = books.filter(b => b.shelf === 'read' && b.dateCompleted)
-    updateStats(container, books)
-    buildCharts(container, books)
-    renderCalendarGrid(container)
-    renderFixTitles(container, books)
-  })
-
   initFixTitles(container)
 
-  container.querySelector('#theme-chips').addEventListener('click', e => {
-    const chip = e.target.closest('[data-theme-pref]')
-    if (!chip) return
-    container.querySelectorAll('[data-theme-pref]').forEach(c => c.classList.toggle('selected', c === chip))
-    setThemePref(chip.dataset.themePref)
+  // ── Period helpers ────────────────────────────────────────────────────────
+
+  const inPeriod = b => year === 'all' || b.dateCompleted.getFullYear() === year
+  const periodBooks = () => read.filter(inPeriod)
+  const periodName = () => year === 'all' ? 'all time' : String(year)
+
+  function periodDays() {
+    if (year === 'all') {
+      if (!read.length) return 1
+      const first = Math.min(...read.map(b => b.dateCompleted.getTime()))
+      return Math.max(1, Math.round((now - first) / DAY))
+    }
+    const end = year === thisYear ? now : new Date(year + 1, 0, 1)
+    return Math.max(1, Math.round((end - new Date(year, 0, 1)) / DAY))
+  }
+
+  // Last year to compare against — up to the same date when looking at this year
+  function comparison() {
+    if (year === 'all') return null
+    const cutoff = year === thisYear ? new Date(year - 1, now.getMonth(), now.getDate(), 23, 59) : null
+    const list = read.filter(b => b.dateCompleted.getFullYear() === year - 1 && (!cutoff || b.dateCompleted <= cutoff))
+    if (!list.length) return null
+    const days = cutoff ? Math.max(1, Math.round((cutoff - new Date(year - 1, 0, 1)) / DAY)) : Math.round((new Date(year, 0, 1) - new Date(year - 1, 0, 1)) / DAY)
+    return { list, days, label: cutoff ? 'this time last year' : String(year - 1) }
+  }
+
+  function rankGenres() {
+    const counts = new Map()
+    read.forEach(b => { if (b.genre) counts.set(b.genre, (counts.get(b.genre) || 0) + 1) })
+    genreColour = new Map([...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, GENRE_SLOTS).map(([g], i) => [g, i]))
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  function renderAll() {
+    renderSummary()
+    renderYears()
+    renderYir()
+    $('#goal-card').hidden = year !== thisYear
+    renderTiles()
+    renderActivity()
+    renderMonthly()
+    renderCalendar()
+    renderRatings()
+    renderAuthors()
+    renderGenres()
+    if (!container.querySelector('.pf-sections.shown')) {
+      requestAnimationFrame(() => $('.pf-sections')?.classList.add('shown'))
+    }
+  }
+
+  function renderSummary() {
+    const first = read.length ? Math.min(...read.map(b => b.dateCompleted.getFullYear())) : null
+    $('#pf-summary').textContent = read.length
+      ? `${plural(read.length, 'book')} read since ${first}`
+      : 'Your reading stats live here'
+  }
+
+  function renderYears() {
+    const years = [...new Set([thisYear, ...read.map(b => b.dateCompleted.getFullYear())])].sort((a, b) => b - a)
+    $('#pf-years').innerHTML = [...years, 'all'].map(y => `
+      <button class="chip ${y === year ? 'selected' : ''}" data-year="${y}" aria-pressed="${y === year}">
+        ${y === 'all' ? 'All time' : y}
+      </button>`).join('')
+  }
+
+  function renderYir() {
+    const y = year === 'all' ? thisYear : year
+    const n = read.filter(b => b.dateCompleted.getFullYear() === y).length
+    $('#yir-title').textContent = `Your ${y} in review`
+    $('#yir-sub').textContent = n
+      ? `${plural(n, 'book')}${y === thisYear ? ' so far' : ''} · see it and share it`
+      : 'Look back on any year'
+  }
+
+  function renderTiles() {
+    const list = periodBooks()
+    const days = periodDays()
+    const pages = sumPages(list)
+    const rating = avgRating(list)
+    const cmp = comparison()
+
+    const delta = (now, then, { pct = false, digits = 0 } = {}) => {
+      if (!cmp || then == null || now == null) return ''
+      const d = pct ? (then ? (now - then) / then * 100 : null) : now - then
+      if (d == null) return ''
+      const shown = Math.abs(d).toFixed(pct ? 0 : digits)
+      if (Number(shown) === 0) return '<span class="pf-delta">same</span>'
+      return `<span class="pf-delta">${d > 0 ? '↑' : '↓'} ${shown}${pct ? '%' : ''}</span>`
+    }
+
+    const prevPages = cmp && sumPages(cmp.list)
+    const tiles = [
+      [list.length || '0', 'books', delta(list.length, cmp?.list.length)],
+      [pages ? short(pages) : '—', 'pages', delta(pages, prevPages, { pct: true })],
+      [rating ? `${rating.toFixed(1)}★` : '—', 'avg rating', delta(rating, cmp && avgRating(cmp.list), { digits: 1 })],
+      [pages ? Math.round(pages / days) : '—', 'pages / day', pages ? delta(pages / days, cmp && prevPages / cmp.days, { pct: true }) : ''],
+      [list.length ? Math.round(days / list.length) : '—', 'days / book', ''],
+      [list.length ? longestWeekStreak(list) : '—', 'week streak', ''],
+    ]
+    $('#pf-tiles').innerHTML = tiles.map(([value, label, d]) => `
+      <div class="pf-tile">
+        <div class="pf-tile-value">${value}</div>
+        <div class="pf-tile-label">${label}</div>
+        ${d}
+      </div>`).join('')
+    $('#pf-tiles-note').textContent = cmp ? `Arrows compare with ${cmp.label}` : ''
+  }
+
+  // ── Reading activity heatmap ──────────────────────────────────────────────
+
+  const level = (n, max) => n ? Math.max(1, Math.min(4, Math.ceil(n / max * 4))) : 0
+  const legendHTML = `
+    <div class="pf-legend" aria-hidden="true">Less ${[0, 1, 2, 3, 4].map(l => `<i class="hm-cell" style="--l:${l}"></i>`).join('')} More</div>`
+
+  function renderActivity() {
+    const el = $('#pf-activity')
+    if (year === 'all') return renderActivityAllTime(el)
+
+    const byDay = new Map()
+    periodBooks().forEach(b => {
+      const k = dayKey(b.dateCompleted)
+      byDay.set(k, [...(byDay.get(k) || []), b])
+    })
+    const start = new Date(year, 0, 1)
+    start.setDate(1 - start.getDay()) // back to Sunday
+    const end = new Date(year, 11, 31)
+    end.setDate(end.getDate() + (6 - end.getDay()))
+
+    let cells = '', labels = '', col = 0
+    for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() === 0) col++
+      if (d.getDate() === 1 && d.getFullYear() === year) labels += `<span style="grid-column:${col}">${MONTHS[d.getMonth()]}</span>`
+      const outside = d.getFullYear() !== year
+      const future = d > now
+      const list = byDay.get(dayKey(d)) || []
+      const l = list.length ? Math.min(4, list.length + 1) : 0
+      cells += outside
+        ? '<i class="hm-cell hm-out"></i>'
+        : `<button class="hm-cell ${future ? 'hm-future' : ''}" style="--l:${l}" data-day="${d.getTime()}"
+            aria-label="${d.toDateString()}: ${plural(list.length, 'book')}"></button>`
+    }
+    const active = byDay.size
+    el.innerHTML = `
+      <div class="pf-card-head"><h2>Reading activity</h2><span>${plural(active, 'day')} with a finished book</span></div>
+      <div class="hm-scroll">
+        <div class="hm-months" style="--cols:${col}">${labels}</div>
+        <div class="hm-grid" style="--cols:${col}">${cells}</div>
+      </div>
+      ${legendHTML}
+      <div class="pf-readout" id="hm-readout">Tap a day to see what you finished</div>`
+
+    el._byDay = byDay
+    // Show the most recent weeks first
+    const scroll = el.querySelector('.hm-scroll')
+    if (year === thisYear) {
+      const cellW = scroll.scrollWidth / col
+      scroll.scrollLeft = Math.max(0, weekIndex(now) - weekIndex(start) - 14) * cellW
+    }
+  }
+
+  function renderActivityAllTime(el) {
+    const counts = new Map()
+    read.forEach(b => {
+      const k = `${b.dateCompleted.getFullYear()}-${b.dateCompleted.getMonth()}`
+      counts.set(k, (counts.get(k) || 0) + 1)
+    })
+    const years = [...new Set(read.map(b => b.dateCompleted.getFullYear()))].sort((a, b) => b - a)
+    const max = Math.max(1, ...counts.values())
+    el.innerHTML = `
+      <div class="pf-card-head"><h2>Reading activity</h2><span>books per month</span></div>
+      <div class="hm-year-grid">
+        <span></span>${MONTHS.map(m => `<span class="hm-col-label">${m[0]}</span>`).join('')}
+        ${years.map(y => `
+          <span class="hm-row-label">${y}</span>
+          ${MONTHS.map((_, m) => {
+            const n = counts.get(`${y}-${m}`) || 0
+            const future = new Date(y, m, 1) > now
+            return `<button class="hm-cell ${future ? 'hm-future' : ''}" style="--l:${level(n, max)}" data-ym="${y}-${m}"
+              aria-label="${MONTHS_LONG[m]} ${y}: ${plural(n, 'book')}"></button>`
+          }).join('')}`).join('')}
+      </div>
+      ${legendHTML}
+      <div class="pf-readout" id="hm-readout">Tap a month to see it in the calendar below</div>`
+    el._counts = counts
+  }
+
+  function selectHeatCell(cell) {
+    const el = $('#pf-activity')
+    el.querySelectorAll('.hm-cell.selected').forEach(c => c.classList.remove('selected'))
+    cell.classList.add('selected')
+    const out = $('#hm-readout')
+    if (cell.dataset.day) {
+      const d = new Date(Number(cell.dataset.day))
+      const list = el._byDay.get(dayKey(d)) || []
+      const date = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      out.innerHTML = list.length
+        ? `<b>${date}</b> · ${list.map(b => `<button class="pf-book-link" data-open-book="${esc(b.id)}">${esc(b.title)}</button>`).join(', ')}`
+        : `<b>${date}</b> · no books finished`
+    } else {
+      const [y, m] = cell.dataset.ym.split('-').map(Number)
+      const n = el._counts.get(cell.dataset.ym) || 0
+      out.innerHTML = `<b>${MONTHS_LONG[m]} ${y}</b> · ${plural(n, 'book')}`
+      cal = { y, m }
+      renderCalendar()
+    }
+  }
+
+  // ── Books per month (or per year, all time) ──────────────────────────────
+
+  function renderMonthly() {
+    const el = $('#pf-monthly')
+    let labels, counts, pages, selected, avg, title, note
+    if (year === 'all') {
+      const years = [...new Set(read.map(b => b.dateCompleted.getFullYear()))].sort((a, b) => a - b)
+      const span = years.length ? Array.from({ length: thisYear - years[0] + 1 }, (_, i) => years[0] + i) : []
+      labels = span.map(y => `’${String(y).slice(2)}`)
+      counts = span.map(y => read.filter(b => b.dateCompleted.getFullYear() === y).length)
+      pages = span.map(y => sumPages(read.filter(b => b.dateCompleted.getFullYear() === y)))
+      el._keys = span
+      selected = -1
+      avg = counts.length ? counts.reduce((s, n) => s + n, 0) / counts.length : 0
+      title = 'Books per year'
+      note = 'Tap a year to explore it'
+    } else {
+      const list = periodBooks()
+      labels = MONTHS.map(m => m[0])
+      counts = MONTHS.map((_, m) => list.filter(b => b.dateCompleted.getMonth() === m).length)
+      pages = MONTHS.map((_, m) => sumPages(list.filter(b => b.dateCompleted.getMonth() === m)))
+      el._keys = MONTHS.map((_, m) => m)
+      const elapsed = year === thisYear ? now.getMonth() + 1 : 12
+      avg = counts.slice(0, elapsed).reduce((s, n) => s + n, 0) / elapsed
+      selected = cal.y === year ? cal.m : counts.indexOf(Math.max(...counts))
+      title = 'Books per month'
+      note = ''
+    }
+    el._counts = counts
+    el._pages = pages
+    const max = Math.max(1, ...counts)
+    el.innerHTML = `
+      <div class="pf-card-head"><h2>${title}</h2><span>avg ${avg.toFixed(1)}</span></div>
+      <div class="pf-bars" style="--n:${counts.length}">
+        ${avg ? `<div class="pf-avg" style="bottom:${avg / max * 100}%" aria-hidden="true"></div>` : ''}
+        ${counts.map((n, i) => `
+          <button class="pf-bar-col ${i === selected ? 'selected' : ''}" data-bar="${i}"
+            aria-label="${year === 'all' ? el._keys[i] : MONTHS_LONG[i]}: ${plural(n, 'book')}">
+            <span class="pf-bar-val">${n}</span>
+            <span class="pf-bar" style="height:${n / max * 100}%; animation-delay:${i * 25}ms"></span>
+          </button>`).join('')}
+      </div>
+      <div class="pf-bar-labels" style="--n:${counts.length}">${labels.map(l => `<span>${l}</span>`).join('')}</div>
+      <div class="pf-readout" id="bars-readout">${note}</div>`
+    if (selected >= 0) describeBar(selected)
+  }
+
+  function describeBar(i) {
+    const el = $('#pf-monthly')
+    const n = el._counts[i], pg = el._pages[i]
+    $('#bars-readout').innerHTML = `<b>${MONTHS_LONG[i]} ${year}</b> · ${plural(n, 'book')}${pg ? ` · ${pg.toLocaleString()} pages` : ''}`
+  }
+
+  function selectBar(i) {
+    const el = $('#pf-monthly')
+    if (year === 'all') return setYear(el._keys[i])
+    el.querySelectorAll('.pf-bar-col').forEach(c => c.classList.toggle('selected', Number(c.dataset.bar) === i))
+    describeBar(i)
+    cal = { y: year, m: i }
+    renderCalendar()
+  }
+
+  // ── Cover calendar ────────────────────────────────────────────────────────
+
+  function renderCalendar() {
+    const el = $('#pf-calendar')
+    const { y, m } = cal
+    const byDay = new Map()
+    read.forEach(b => {
+      const d = b.dateCompleted
+      if (d.getFullYear() === y && d.getMonth() === m) byDay.set(d.getDate(), [...(byDay.get(d.getDate()) || []), b])
+    })
+    const first = new Date(y, m, 1).getDay()
+    const last = new Date(y, m + 1, 0).getDate()
+    const total = [...byDay.values()].reduce((s, l) => s + l.length, 0)
+
+    let cells = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<span class="pf-cal-head">${d}</span>`).join('')
+    cells += '<span></span>'.repeat(first)
+    for (let d = 1; d <= last; d++) {
+      const list = byDay.get(d) || []
+      const isToday = y === thisYear && m === now.getMonth() && d === now.getDate()
+      if (!list.length) {
+        cells += `<span class="pf-cal-day ${isToday ? 'today' : ''}"><span class="pf-cal-num">${d}</span></span>`
+        continue
+      }
+      const b = list[0]
+      cells += `
+        <button class="pf-cal-day has-book ${list.some(x => x.isBOTM) ? 'is-botm' : ''}" data-cal-day="${d}"
+          aria-label="${MONTHS_LONG[m]} ${d}: ${esc(list.map(x => x.title).join(', '))}">
+          ${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="" loading="lazy" />` : `<span class="pf-cal-noimg">${esc(b.title)}</span>`}
+          <span class="pf-cal-num">${d}</span>
+          ${list.length > 1 ? `<span class="pf-cal-more">+${list.length - 1}</span>` : ''}
+        </button>`
+    }
+    el._byDay = byDay
+    el.innerHTML = `
+      <div class="pf-cal-nav">
+        <button class="icon-btn" data-cal-step="-1" aria-label="Previous month"><span class="material-symbols-rounded">chevron_left</span></button>
+        <div class="pf-cal-title"><h2>${MONTHS_LONG[m]} ${y}</h2><span>${total ? plural(total, 'book') + ' finished' : 'No books finished'}</span></div>
+        <button class="icon-btn" data-cal-step="1" aria-label="Next month"><span class="material-symbols-rounded">chevron_right</span></button>
+      </div>
+      <div class="pf-cal-grid">${cells}</div>
+      <div class="pf-cal-list" id="pf-cal-list"></div>`
+  }
+
+  function stepCalendar(step) {
+    let { y, m } = cal
+    m += step
+    if (m < 0) { m = 11; y-- }
+    if (m > 11) { m = 0; y++ }
+    cal = { y, m }
+    renderCalendar()
+    // Keep the month bars in step when the calendar stays inside the chosen year
+    if (y === year) {
+      $('#pf-monthly').querySelectorAll('.pf-bar-col').forEach(c => c.classList.toggle('selected', Number(c.dataset.bar) === m))
+      describeBar(m)
+    }
+  }
+
+  function tapCalendarDay(d) {
+    const list = $('#pf-calendar')._byDay.get(d) || []
+    if (list.length === 1) return openBook(list[0])
+    $('#pf-cal-list').innerHTML = `
+      <div class="pf-cal-list-head">${MONTHS_LONG[cal.m]} ${d}</div>
+      ${list.map(bookRowHTML).join('')}`
+  }
+
+  // ── Ratings ───────────────────────────────────────────────────────────────
+
+  function renderRatings() {
+    const el = $('#pf-ratings')
+    const list = periodBooks()
+    const rated = list.filter(b => b.rating > 0)
+    const counts = [5, 4, 3, 2, 1].map(s => rated.filter(b => b.rating === s).length)
+    const max = Math.max(1, ...counts)
+    const avg = avgRating(list)
+    el.innerHTML = `
+      <div class="pf-card-head"><h2>Ratings</h2><span>${avg ? `${avg.toFixed(1)}★ average` : 'No ratings yet'}</span></div>
+      ${[5, 4, 3, 2, 1].map((s, i) => `
+        <button class="pf-hbar-row" data-rating="${s}" ${counts[i] ? '' : 'disabled'}
+          aria-label="${s} stars: ${plural(counts[i], 'book')}">
+          <span class="pf-hbar-label">${s}★</span>
+          <span class="pf-hbar-track"><span class="pf-hbar" style="width:${counts[i] / max * 100}%"></span></span>
+          <span class="pf-hbar-count">${counts[i]}</span>
+        </button>`).join('')}
+      ${list.length - rated.length ? `<div class="pf-foot">${list.length - rated.length} unrated</div>` : ''}`
+  }
+
+  function openRatingSheet(stars) {
+    const list = periodBooks().filter(b => b.rating === stars)
+      .sort((a, b) => b.dateCompleted - a.dateCompleted)
+    const { sheet, close } = openSheet(`
+      <div class="sheet-header">
+        <div class="sheet-meta" style="flex:1;">
+          <div class="sheet-title" style="font-size:1.1rem;">${'★'.repeat(stars)} books</div>
+          <div class="pf-sheet-sub">${plural(list.length, 'book')} · ${periodName()}</div>
+        </div>
+      </div>
+      <div class="sheet-body pf-sheet-list">${list.map(bookRowHTML).join('')}</div>`)
+    sheet.addEventListener('click', e => {
+      const row = e.target.closest('[data-open-book]')
+      if (!row) return
+      close('manual')
+      const book = books.find(b => b.id === row.dataset.openBook)
+      setTimeout(() => openBook(book), 320)
+    })
+  }
+
+  // ── Top authors ───────────────────────────────────────────────────────────
+
+  function renderAuthors() {
+    const el = $('#pf-authors')
+    const stats = new Map()
+    periodBooks().forEach(b => splitAuthors(b.author).forEach(a => {
+      const s = stats.get(a) || { name: a, count: 0, list: [] }
+      s.count++; s.list.push(b)
+      stats.set(a, s)
+    }))
+    const top = [...stats.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 5)
+    const max = top[0]?.count || 1
+    el.innerHTML = `
+      <div class="pf-card-head"><h2>Top authors</h2><span>${plural(stats.size, 'author')}</span></div>
+      ${top.length ? top.map(a => {
+        const avg = avgRating(a.list)
+        return `
+        <button class="pf-author-row" data-author="${esc(a.name)}">
+          ${authorAvatarHTML(a.name)}
+          <span class="pf-author-main">
+            <span class="pf-author-name">${esc(a.name)}</span>
+            <span class="pf-hbar-track pf-hbar-track--thin"><span class="pf-hbar" style="width:${a.count / max * 100}%"></span></span>
+          </span>
+          <span class="pf-author-count">${a.count}${avg ? `<small>${avg.toFixed(1)}★</small>` : ''}</span>
+        </button>`
+      }).join('') : '<div class="pf-foot">Finish a book to see your top authors</div>'}`
+    hydrateAuthorAvatars(el)
+  }
+
+  // ── Genres ────────────────────────────────────────────────────────────────
+
+  function renderGenres() {
+    const el = $('#pf-genres')
+    const counts = new Map()
+    const list = periodBooks()
+    list.forEach(b => { if (b.genre) counts.set(b.genre, (counts.get(b.genre) || 0) + 1) })
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    const top = sorted.slice(0, GENRE_SLOTS)
+    const other = sorted.slice(GENRE_SLOTS).reduce((s, [, n]) => s + n, 0)
+    const total = sorted.reduce((s, [, n]) => s + n, 0)
+
+    // Each genre keeps its all-time colour; genres outside the all-time top
+    // five borrow a slot no other genre on screen is using
+    const used = new Set(top.map(([g]) => genreColour.get(g)).filter(i => i !== undefined))
+    const free = [...Array(GENRE_SLOTS).keys()].filter(i => !used.has(i))
+    const slots = top.map(([g]) => genreColour.has(g) ? genreColour.get(g) : free.shift())
+
+    const rows = [...top.map(([g, n], i) => ({ g, n, colour: `var(--genre-${slots[i] + 1})` })),
+      ...(other ? [{ g: 'Other', n: other, colour: 'var(--genre-other)', other: true }] : [])]
+    el.innerHTML = `
+      <div class="pf-card-head"><h2>Genres</h2><span>${plural(counts.size, 'genre')}</span></div>
+      ${total ? `
+        <div class="pf-stack" role="img" aria-label="${esc(rows.map(r => `${r.g} ${Math.round(r.n / total * 100)}%`).join(', '))}">
+          ${rows.map(r => `<span style="flex:${r.n};background:${r.colour}"></span>`).join('')}
+        </div>
+        ${rows.map(r => `
+          <${r.other ? 'div' : 'button'} class="pf-genre-row" ${r.other ? '' : `data-genre="${esc(r.g)}"`}>
+            <span class="pf-swatch" style="background:${r.colour}"></span>
+            <span class="pf-genre-name">${esc(r.g)}</span>
+            <span class="pf-genre-count">${r.n} · ${Math.round(r.n / total * 100)}%</span>
+            ${r.other ? '' : '<span class="material-symbols-rounded pf-chevron">chevron_right</span>'}
+          </${r.other ? 'div' : 'button'}>`).join('')}
+        ${list.length - total ? `<div class="pf-foot">${list.length - total} without a genre</div>` : ''}`
+      : '<div class="pf-foot">No genres yet</div>'}`
+  }
+
+  // ── Shared bits ───────────────────────────────────────────────────────────
+
+  function bookRowHTML(b) {
+    return `
+      <button class="pf-book-row" data-open-book="${esc(b.id)}">
+        <span class="pf-book-row-cover">${coverImgHTML(b)}</span>
+        <span class="pf-book-row-text">
+          <span class="pf-book-row-title">${esc(b.title)}</span>
+          <span class="pf-book-row-sub">${esc(b.author)} · ${b.dateCompleted.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+        </span>
+      </button>`
+  }
+
+  function openBook(book) {
+    if (book) openBookDetail(book, book.shelf, null)
+  }
+
+  function setYear(y) {
+    year = y
+    if (y !== 'all') {
+      // Land the calendar on this month, or the last month you finished a book that year
+      const months = read.filter(b => b.dateCompleted.getFullYear() === y).map(b => b.dateCompleted.getMonth())
+      cal = { y, m: y === thisYear ? now.getMonth() : months.length ? Math.max(...months) : 11 }
+    }
+    renderAll()
+    // Bring the chip into view sideways only (scrollIntoView would also scroll the app shell)
+    const row = $('#pf-years'), chip = row.querySelector(`[data-year="${y}"]`)
+    if (chip) row.scrollTo({ left: chip.offsetLeft - row.clientWidth / 2 + chip.offsetWidth / 2, behavior: 'smooth' })
+  }
+
+  scroller.addEventListener('click', e => {
+    const t = e.target
+    const yearChip = t.closest('[data-year]')
+    if (yearChip) return setYear(yearChip.dataset.year === 'all' ? 'all' : Number(yearChip.dataset.year))
+    const bookLink = t.closest('[data-open-book]')
+    if (bookLink) return openBook(books.find(b => b.id === bookLink.dataset.openBook))
+    const cell = t.closest('.hm-cell[data-day], .hm-cell[data-ym]')
+    if (cell) return selectHeatCell(cell)
+    const bar = t.closest('[data-bar]')
+    if (bar) return selectBar(Number(bar.dataset.bar))
+    const step = t.closest('[data-cal-step]')
+    if (step) return stepCalendar(Number(step.dataset.calStep))
+    const day = t.closest('[data-cal-day]')
+    if (day) return tapCalendarDay(Number(day.dataset.calDay))
+    const rating = t.closest('[data-rating]')
+    if (rating) return openRatingSheet(Number(rating.dataset.rating))
+    const author = t.closest('[data-author]')
+    if (author) return openAuthorPage(author.dataset.author)
+    const genre = t.closest('[data-genre]')
+    if (genre) return openLibrary({ shelf: 'read', filters: { genres: [genre.dataset.genre], years: year === 'all' ? [] : [year] } })
   })
 
-  // Charts bake in their colours, so redraw them when the theme flips
-  const onThemeChange = () => { if (allBooks.length) buildCharts(container, allBooks) }
-  window.addEventListener('themechange', onThemeChange)
+  return () => { unsub(); goal.destroy() }
+}
 
-  return () => {
-    unsub(); goal.destroy(); killCharts()
-    window.removeEventListener('themechange', onThemeChange)
-  }
+export function destroyProfile() {}
+
+// ── HTML ──────────────────────────────────────────────────────────────────────
+
+function buildHTML(user) {
+  const avatar = user?.photoURL
+    ? `<img src="${esc(user.photoURL)}" alt="" referrerpolicy="no-referrer" />`
+    : '<span class="material-symbols-rounded">person</span>'
+  return `
+    <div class="profile-screen">
+      <div class="profile-bar">
+        <button class="icon-btn" id="profile-back" aria-label="Back">
+          <span class="material-symbols-rounded">arrow_back</span>
+        </button>
+        <div class="pf-avatar">${avatar}</div>
+        <div class="pf-id">
+          <div class="pf-name">${esc(user?.displayName || 'Reader')}</div>
+          <div class="pf-summary" id="pf-summary"></div>
+        </div>
+        <button class="icon-btn" id="profile-settings" aria-label="Settings">
+          <span class="material-symbols-rounded">settings</span>
+        </button>
+      </div>
+
+      <div class="profile-scroll">
+        <div class="pf-years" id="pf-years" role="group" aria-label="Year"></div>
+
+        <div class="pf-sections">
+          <button class="pf-yir" id="year-review-btn">
+            <span class="material-symbols-rounded pf-yir-icon">auto_awesome</span>
+            <span class="pf-yir-text"><b id="yir-title">Year in review</b><small id="yir-sub"></small></span>
+            <span class="material-symbols-rounded">chevron_right</span>
+          </button>
+
+          <div id="fix-titles"></div>
+
+          <div class="chart-card goal-card pf-card" id="goal-card"></div>
+
+          <section class="pf-card pf-tiles-card">
+            <div class="pf-tiles" id="pf-tiles"></div>
+            <div class="pf-foot" id="pf-tiles-note"></div>
+          </section>
+
+          <section class="pf-card" id="pf-activity"></section>
+          <section class="pf-card" id="pf-monthly"></section>
+          <section class="pf-card" id="pf-calendar"></section>
+          <section class="pf-card" id="pf-ratings"></section>
+          <section class="pf-card" id="pf-authors"></section>
+          <section class="pf-card" id="pf-genres"></section>
+        </div>
+      </div>
+    </div>
+  `
 }
 
 // ── Fix date-mangled titles ───────────────────────────────────────────────────
@@ -167,400 +696,10 @@ function initFixTitles(container) {
   })
 }
 
-export function destroyProfile() { killCharts() }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDuration(days) {
-  if (days <= 1) return '1 day'
-  if (days < 14) return `${Math.round(days)} days`
-  if (days < 30) return `${Math.round(days / 7)} wks`
-  return `${Math.round(days / 30)} mo`
-}
-
-// ── Stats ─────────────────────────────────────────────────────────────────────
-
-function updateStats(container, books) {
-  const c = { want: 0, read: 0 }
-  books.forEach(b => { if (b.shelf in c) c[b.shelf]++ })
-  ;['want', 'read'].forEach(s => {
-    const el = container.querySelector(`[data-stat="${s}"]`)
-    if (el) el.textContent = c[s]
-  })
-
-  // Reading pace — total pages read ÷ days since first completed book
-  const readWithPages = books.filter(b => b.shelf === 'read' && b.pageCount > 0 && b.dateCompleted)
-  const paceEl = container.querySelector('[data-stat="pace"]')
-  if (paceEl) {
-    if (readWithPages.length) {
-      const totalPg  = readWithPages.reduce((s, b) => s + b.pageCount, 0)
-      const earliest = new Date(Math.min(...readWithPages.map(b => b.dateCompleted.getTime())))
-      const days     = Math.max(1, Math.round((Date.now() - earliest.getTime()) / 86400000))
-      paceEl.textContent = Math.round(totalPg / days)
-    } else {
-      paceEl.textContent = '—'
-    }
-  }
-
-  // Total pages read
-  const totalPages = books
-    .filter(b => b.shelf === 'read' && b.pageCount > 0)
-    .reduce((sum, b) => sum + b.pageCount, 0)
-  const pagesEl = container.querySelector('[data-stat="pages"]')
-  if (pagesEl) pagesEl.textContent = totalPages >= 1000
-    ? `${(totalPages / 1000).toFixed(1)}k`
-    : totalPages || '—'
-
-  // Average star rating (rated books only)
-  const rated = books.filter(b => b.rating > 0)
-  const avgRatingEl = container.querySelector('[data-stat="avg-rating"]')
-  if (avgRatingEl) avgRatingEl.textContent = rated.length
-    ? (rated.reduce((s, b) => s + b.rating, 0) / rated.length).toFixed(1)
-    : '—'
-
-  // Average days between book completions
-  const withDate = books.filter(b => b.shelf === 'read' && b.dateCompleted)
-  const avgDaysEl = container.querySelector('[data-stat="avg-days"]')
-  if (avgDaysEl) {
-    if (withDate.length >= 2) {
-      const earliest = new Date(Math.min(...withDate.map(b => b.dateCompleted.getTime())))
-      const latest   = new Date(Math.max(...withDate.map(b => b.dateCompleted.getTime())))
-      const span = Math.round((latest.getTime() - earliest.getTime()) / 86400000)
-      avgDaysEl.textContent = formatDuration(Math.round(span / (withDate.length - 1)))
-    } else {
-      avgDaysEl.textContent = '—'
-    }
-  }
-
-}
-
-// ── Charts ────────────────────────────────────────────────────────────────────
-
-function buildCharts(container, books) {
-  if (!Chart) {
-    loadChart().then(c => {
-      Chart = c
-      if (container.isConnected) buildCharts(container, books)
-    })
-    return
-  }
-  killCharts()
-  Object.assign(C, chartColors())
-  Chart.defaults.color = C.text
-  // Animate chart section into view on first data load
-  const section = container.querySelector('.chart-section')
-  if (section && !section.classList.contains('charts-shown')) {
-    requestAnimationFrame(() => section.classList.add('charts-shown'))
-  }
-  const read = books.filter(b => b.shelf === 'read' && b.dateCompleted)
-  chartByYear(container, read)
-  chartByMonth(container, read)
-  chartRatings(container, books)
-  chartAuthors(container, books)
-  chartGenres(container, books)
-  chartGenreBreakdown(container, books)
-}
-
-// Bar — books read by year
-function chartByYear(container, read) {
-  const m = new Map()
-  read.forEach(b => {
-    const y = b.dateCompleted.getFullYear().toString()
-    m.set(y, (m.get(y) || 0) + 1)
-  })
-  const labels = Array.from(m.keys()).sort()
-  const data   = labels.map(y => m.get(y))
-  const ctx = container.querySelector('#chart-year')
-  if (!ctx) return
-  charts.year = new Chart(ctx, {
-    type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: C.primary, borderRadius: 6, borderSkipped: false }] },
-    options: baseOpts({ scales: { x: xAxis(), y: yAxis() } }),
-  })
-}
-
-// Line — books read by month
-function chartByMonth(container, read) {
-  if (!read.length) return
-  const m = new Map()
-  read.forEach(b => {
-    const d   = b.dateCompleted
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    m.set(key, (m.get(key) || 0) + 1)
-  })
-  const sorted = Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-  const labels = sorted.map(([k]) => {
-    const [y, mo] = k.split('-')
-    return new Date(+y, +mo - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-  })
-  const data = sorted.map(([, v]) => v)
-  const ctx = container.querySelector('#chart-month')
-  if (!ctx) return
-  charts.month = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data,
-        borderColor: C.secondary,
-        backgroundColor: `${C.secondary}44`,
-        pointBackgroundColor: C.secondary,
-        fill: true,
-        tension: 0.35,
-        pointRadius: data.length > 24 ? 2 : 4,
-        pointHoverRadius: data.length > 24 ? 5 : 7,
-        pointHitRadius: 24,
-      }],
-    },
-    options: baseOpts({
-      interaction: { mode: 'index', intersect: false },
-      scales: {
-        x: xAxis({ ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 12 } }),
-        y: yAxis(),
-      },
-    }),
-  })
-}
-
-// Doughnut — rating breakdown
-function chartRatings(container, books) {
-  const rated = books.filter(b => b.rating > 0)
-  if (!rated.length) return
-  const m = new Map([[1,0],[2,0],[3,0],[4,0],[5,0]])
-  rated.forEach(b => m.set(b.rating, m.get(b.rating) + 1))
-  const ctx = container.querySelector('#chart-ratings')
-  if (!ctx) return
-  charts.ratings = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ['1 ★','2 ★','3 ★','4 ★','5 ★'],
-      datasets: [{
-        data: [1,2,3,4,5].map(n => m.get(n)),
-        backgroundColor: RATING_PALETTE,
-        borderWidth: 0,
-        hoverOffset: 8,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      cutout: '60%',
-      animation: { duration: 500, easing: 'easeOutQuart' },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'bottom',
-          labels: { padding: 14, color: C.text, font: { family: 'Nunito, system-ui', size: 12 } },
-        },
-        tooltip: tooltipStyle(),
-      },
-    },
-  })
-}
-
-// Horizontal bar — top 5 authors
-function chartAuthors(container, books) {
-  const m = new Map()
-  books.forEach(b => { if (b.author) m.set(b.author, (m.get(b.author) || 0) + 1) })
-  const top = Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)
-  if (!top.length) return
-  const ctx = container.querySelector('#chart-authors')
-  if (!ctx) return
-  charts.authors = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: top.map(([a]) => a),
-      datasets: [{ data: top.map(([, n]) => n), backgroundColor: C.primary2, borderRadius: 6, borderSkipped: false }],
-    },
-    options: baseOpts({ indexAxis: 'y', aspectRatio: 1.4, scales: { x: yAxis(), y: xAxis() } }),
-  })
-}
-
-// Horizontal bar — top 5 genres
-function chartGenres(container, books) {
-  const m = new Map()
-  books.forEach(b => { if (b.genre) m.set(b.genre, (m.get(b.genre) || 0) + 1) })
-  const top = Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5)
-  if (!top.length) return
-  const ctx = container.querySelector('#chart-genres')
-  if (!ctx) return
-  charts.genres = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: top.map(([g]) => g),
-      datasets: [{ data: top.map(([, n]) => n), backgroundColor: C.tertiary, borderRadius: 6, borderSkipped: false }],
-    },
-    options: baseOpts({ indexAxis: 'y', aspectRatio: 1.4, scales: { x: yAxis(), y: xAxis() } }),
-  })
-}
-
-// Doughnut — genre percentage breakdown (all shelves)
-function chartGenreBreakdown(container, books) {
-  const m = new Map()
-  books.forEach(b => { if (b.genre) m.set(b.genre, (m.get(b.genre) || 0) + 1) })
-  const entries = Array.from(m.entries()).sort((a, b) => b[1] - a[1])
-  if (!entries.length) return
-  const ctx = container.querySelector('#chart-genre-breakdown')
-  if (!ctx) return
-  const total = entries.reduce((s, [, n]) => s + n, 0)
-  charts.genreBreakdown = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: entries.map(([g]) => g),
-      datasets: [{
-        data: entries.map(([, n]) => n),
-        backgroundColor: entries.map((_, i) => DOUGHNUT_PALETTE[i % DOUGHNUT_PALETTE.length]),
-        borderWidth: 0,
-        hoverOffset: 8,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      cutout: '55%',
-      animation: { duration: 500, easing: 'easeOutQuart' },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'bottom',
-          labels: { padding: 14, color: C.text, font: { family: 'Nunito, system-ui', size: 12 } },
-        },
-        tooltip: {
-          ...tooltipStyle(),
-          callbacks: {
-            label: ctx => {
-              const pct = Math.round((ctx.raw / total) * 100)
-              return ` ${ctx.label}: ${ctx.raw} book${ctx.raw !== 1 ? 's' : ''} (${pct}%)`
-            },
-          },
-        },
-      },
-    },
-  })
-}
-
-// ── Chart helpers ─────────────────────────────────────────────────────────────
-
-function tooltipStyle() {
-  return {
-    backgroundColor: C.tooltipBg,
-    titleColor: C.tooltipTitle,
-    bodyColor: C.text,
-    borderColor: C.grid,
-    borderWidth: 1,
-    padding: 10,
-    cornerRadius: 8,
-  }
-}
-
-function baseOpts(overrides = {}) {
-  return {
-    responsive: true,
-    maintainAspectRatio: true,
-    animation: { duration: 500, easing: 'easeOutQuart' },
-    plugins: {
-      legend: { display: false },
-      tooltip: tooltipStyle(),
-    },
-    ...overrides,
-  }
-}
-
-function xAxis(extra = {}) {
-  return { grid: { display: false }, border: { display: false }, ticks: { color: C.text }, ...extra }
-}
-
-function yAxis(extra = {}) {
-  return { grid: { color: C.grid }, border: { display: false }, ticks: { color: C.text, precision: 0 }, ...extra }
-}
-
-// ── Reading Calendar ──────────────────────────────────────────────────────────
-
-function initCalendar(container) {
-  container.querySelector('#cal-prev')?.addEventListener('click', () => {
-    calState.month--
-    if (calState.month < 0) { calState.month = 11; calState.year-- }
-    renderCalendarGrid(container)
-  })
-  container.querySelector('#cal-next')?.addEventListener('click', () => {
-    calState.month++
-    if (calState.month > 11) { calState.month = 0; calState.year++ }
-    renderCalendarGrid(container)
-  })
-}
-
-function renderCalendarGrid(container) {
-  const { year, month } = calState
-  const monthLabel = new Date(year, month, 1)
-    .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-
-  const monthEl = container.querySelector('#cal-month-label')
-  if (monthEl) monthEl.textContent = monthLabel
-
-  const gridEl = container.querySelector('#cal-grid')
-  if (!gridEl) return
-
-  // Map day → books completed that day
-  const dayMap = new Map()
-  calendarBooks.forEach(b => {
-    const d = b.dateCompleted
-    if (d.getFullYear() === year && d.getMonth() === month) {
-      const day = d.getDate()
-      if (!dayMap.has(day)) dayMap.set(day, [])
-      dayMap.get(day).push(b)
-    }
-  })
-
-  const firstDay = new Date(year, month, 1).getDay()  // 0 = Sun
-  const lastDay  = new Date(year, month + 1, 0).getDate()
-  const DAY_HDRS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
-
-  let html = DAY_HDRS.map(d => `<div class="cal-day-header">${d}</div>`).join('')
-
-  for (let i = 0; i < firstDay; i++) html += `<div class="cal-day cal-day-empty"></div>`
-
-  const today = new Date()
-  for (let d = 1; d <= lastDay; d++) {
-    const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d
-    const bks = dayMap.get(d) || []
-    const chips = bks.map(b =>
-      `<button class="cal-book-chip" data-book-id="${b.id}">${esc(b.title)}</button>`
-    ).join('')
-    html += `<div class="cal-day${isToday ? ' cal-today' : ''}${bks.length ? ' cal-has-books' : ''}">
-      <div class="cal-day-num">${d}</div>
-      ${chips}
-    </div>`
-  }
-
-  gridEl.innerHTML = html
-
-  // Animate calendar section into view on first render
-  const calSection = container.querySelector('.reading-calendar-section')
-  if (calSection && !calSection.classList.contains('charts-shown')) {
-    requestAnimationFrame(() => calSection.classList.add('charts-shown'))
-  }
-
-  // Wire up chip taps → open book detail sheet
-  gridEl.querySelectorAll('.cal-book-chip').forEach(chip => {
-    chip.addEventListener('click', async e => {
-      e.stopPropagation()
-      const id = chip.dataset.bookId
-      const book = calendarBooks.find(b => b.id === id)
-      if (!book) return
-      try {
-        const full = await getBook(id)
-        openBookDetail({ ...book, ...full }, 'read', null)
-      } catch {
-        openBookDetail(book, 'read', null)
-      }
-    })
-  })
-}
-
 // ── Year in Review ────────────────────────────────────────────────────────────
 
-function openYearInReview(books) {
-  let year = new Date().getFullYear()
+function openYearInReview(books, startYear = new Date().getFullYear()) {
+  let year = startYear
 
   const scrim = document.createElement('div')
   scrim.className = 'sheet-scrim'
@@ -737,133 +876,4 @@ function openYearInReview(books) {
   }, { passive: true })
 
   render()
-}
-
-// ── HTML ──────────────────────────────────────────────────────────────────────
-
-function buildHTML(user) {
-  const avatarHTML = user?.photoURL
-    ? `<img src="${esc(user.photoURL)}" alt="Avatar" referrerpolicy="no-referrer" />`
-    : `<span class="material-symbols-rounded">person</span>`
-
-  return `
-    <div class="profile-screen">
-      <div class="profile-bar">
-        <button class="icon-btn" id="profile-back" aria-label="Back">
-          <span class="material-symbols-rounded">arrow_back</span>
-        </button>
-        <span class="botm-page-title">Profile</span>
-      </div>
-      <div class="profile-hero">
-        <div class="profile-avatar">${avatarHTML}</div>
-        <div class="profile-name">${esc(user?.displayName || 'Reader')}</div>
-        <div class="profile-email">${esc(user?.email)}</div>
-      </div>
-
-      <div id="fix-titles"></div>
-
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-number" data-stat="read">—</div>
-          <div class="stat-label">Read</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number" data-stat="pace">—</div>
-          <div class="stat-label">Pages / Day</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number" data-stat="want">—</div>
-          <div class="stat-label">TBR</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number" data-stat="pages">—</div>
-          <div class="stat-label">Pages Read</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number" data-stat="avg-rating">—</div>
-          <div class="stat-label">Avg Rating</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number" data-stat="avg-days">—</div>
-          <div class="stat-label">Days / Book</div>
-        </div>
-      </div>
-
-      <div class="chart-section">
-        <div class="chart-card goal-card" id="goal-card"></div>
-        <div class="chart-card">
-          <div class="chart-title">Books Read by Year</div>
-          <canvas id="chart-year"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">Books Read by Month</div>
-          <canvas id="chart-month"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">Rating Breakdown</div>
-          <div style="max-width:240px;margin:0 auto;">
-            <canvas id="chart-ratings"></canvas>
-          </div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">Top 5 Authors</div>
-          <canvas id="chart-authors"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">Top 5 Genres</div>
-          <canvas id="chart-genres"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">Genre Breakdown</div>
-          <div style="max-width:260px;margin:0 auto;">
-            <canvas id="chart-genre-breakdown"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Reading Calendar -->
-      <div class="reading-calendar-section">
-        <div class="chart-card" style="padding:12px 16px 16px;">
-          <div class="cal-nav">
-            <button class="icon-btn" id="cal-prev" aria-label="Previous month">
-              <span class="material-symbols-rounded">chevron_left</span>
-            </button>
-            <span id="cal-month-label" class="chart-title" style="margin:0;flex:1;text-align:center;"></span>
-            <button class="icon-btn" id="cal-next" aria-label="Next month">
-              <span class="material-symbols-rounded">chevron_right</span>
-            </button>
-          </div>
-          <div id="cal-grid" class="cal-grid"></div>
-        </div>
-      </div>
-
-      <div class="appearance-section">
-        <div class="chart-card">
-          <div class="chart-title">Appearance</div>
-          <div class="chips" id="theme-chips">
-            ${[['system', 'brightness_auto', 'System'], ['light', 'light_mode', 'Light'], ['dark', 'dark_mode', 'Dark']]
-              .map(([id, icon, label]) => `
-                <button class="chip ${getThemePref() === id ? 'selected' : ''}" data-theme-pref="${id}">
-                  <span class="material-symbols-rounded">${icon}</span>${label}
-                </button>`).join('')}
-          </div>
-        </div>
-      </div>
-
-      <div class="profile-actions">
-        <button class="btn btn-tonal" id="year-review-btn" style="width:100%; height:48px;">
-          <span class="material-symbols-rounded">auto_stories</span>
-          Year in Review
-        </button>
-        <button class="btn btn-tonal" id="manage-genres-btn" style="width:100%; height:48px;">
-          <span class="material-symbols-rounded">sell</span>
-          Manage genres
-        </button>
-        <button class="btn btn-outlined" id="sign-out-btn" style="width:100%; height:48px;">
-          <span class="material-symbols-rounded">logout</span>
-          Sign out
-        </button>
-      </div>
-    </div>
-  `
 }
