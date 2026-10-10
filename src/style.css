@@ -3682,7 +3682,10 @@ html, body {
   color: var(--accent-text);
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
 }
-.fy-note { font-size: 0.75rem; font-weight: 700; color: var(--md-on-surface-variant); white-space: nowrap; }
+.fy-note { flex-shrink: 0; font-size: 0.75rem; font-weight: 700; color: var(--md-on-surface-variant); white-space: nowrap; }
+/* Headings stay on one line; the short source label sits beside them */
+.fy-head h2 { min-width: 0; white-space: nowrap; }
+.fy-head h2 .material-symbols-rounded { flex-shrink: 0; }
 .fy-row {
   display: flex;
   gap: 12px;

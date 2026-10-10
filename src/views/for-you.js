@@ -17,8 +17,8 @@ import { showSnackbar } from './shelves.js'
 const SECTIONS = [
   { id: 'series',  title: 'Continue your series',     icon: 'collections_bookmark' },
   { id: 'authors', title: 'New from authors you love', icon: 'favorite' },
-  { id: 'similar', title: 'Authors you might like',    icon: 'auto_awesome', note: 'Suggested by Gemini' },
-  { id: 'tbr',     title: 'Pick your next read',       icon: 'bookmark', note: 'From your TBR' },
+  { id: 'similar', title: 'Authors you might like',    icon: 'auto_awesome', note: 'Gemini' },
+  { id: 'tbr',     title: 'Pick your next read',       icon: 'bookmark', note: 'Your TBR' },
   { id: 'genres',  title: 'Popular in your genres',    icon: 'local_fire_department', note: 'Open Library' },
 ]
 
